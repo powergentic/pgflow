@@ -1,0 +1,50 @@
+# .NET / C#
+bin/
+obj/
+out/
+TestResults/
+artifacts/
+
+# User-specific files
+*.user
+*.rsuser
+*.suo
+*.userosscache
+*.sln.docstates
+
+# IDE / editor
+.vs/
+.vscode/
+.idea/
+
+# Build, diagnostics, and logs
+*.cache
+*.log
+*.bak
+*.tmp
+*.temp
+*.pid
+
+# Visual Studio files
+*.vspscc
+*.vssscc
+*.dbmdl
+
+# Coverage
+coverage/
+coverage-results/
+*.coverage
+*.coveragexml
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+!**/packages/build/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local workflow run outputs
+logs/

@@ -1,0 +1,17 @@
+name: Basic Script Workflow
+version: 1
+variables:
+  greeting: Hello from Powergentic
+execution:
+  maxTransitions: 5
+  maxVisitsPerAction: 2
+actions:
+  - id: hello
+    uses: script
+    with:
+      shell: bash
+      path: scripts/hello.sh
+      environment:
+        GREETING: ${ variables.greeting }
+    outputs:
+      message: ${ actions.hello.outputs.message }
