@@ -86,6 +86,7 @@ public sealed class ScriptActionRunner(ILogger<ScriptActionRunner> logger) : IAc
         startInfo.RedirectStandardError = true;
         startInfo.Environment["ORCHESTRATOR_OUTPUT"] = outputFile;
         startInfo.Environment["ORCHESTRATOR_PROJECT_FOLDER"] = context.ProjectFolder;
+        startInfo.Environment["ORCHESTRATOR_TARGET_WORKING_DIRECTORY"] = context.TargetWorkingDirectory;
         startInfo.Environment["ORCHESTRATOR_RUN_ID"] = context.RunId;
 
         foreach (var pair in context.Environment)
@@ -111,12 +112,12 @@ public sealed class ScriptActionRunner(ILogger<ScriptActionRunner> logger) : IAc
     {
         if (string.IsNullOrWhiteSpace(configured))
         {
-            return context.ProjectFolder;
+            return context.TargetWorkingDirectory;
         }
 
         return Path.IsPathRooted(configured)
             ? configured
-            : Path.GetFullPath(Path.Combine(context.ProjectFolder, configured));
+            : Path.GetFullPath(Path.Combine(context.TargetWorkingDirectory, configured));
     }
 
     private static async Task<string> ResolveScriptPathAsync(ActionExecutionContext context, string shell, string? inlineScript, string? fileValue, string? pathValue, CancellationToken cancellationToken)

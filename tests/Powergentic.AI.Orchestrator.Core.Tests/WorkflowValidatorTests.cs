@@ -199,6 +199,45 @@ public class WorkflowValidatorTests
         Assert.Contains(result.Errors, error => error.Contains("unsupported action type", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public void Validate_FailsForUnnecessaryGotoToNextAction()
+    {
+        var workflow = new WorkflowDefinition
+        {
+            Name = "demo",
+            Actions =
+            [
+                new WorkflowActionDefinition
+                {
+                    Id = "first",
+                    Uses = "script",
+                    With = new Dictionary<string, object?>
+                    {
+                        ["shell"] = "bash",
+                        ["run"] = "echo hi"
+                    },
+                    Next = [ new WorkflowTransitionDefinition { Goto = "second" } ]
+                },
+                new WorkflowActionDefinition
+                {
+                    Id = "second",
+                    Uses = "script",
+                    With = new Dictionary<string, object?>
+                    {
+                        ["shell"] = "bash",
+                        ["run"] = "echo hi again"
+                    }
+                }
+            ]
+        };
+
+        var validator = new WorkflowValidator();
+        var result = validator.Validate(workflow);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(result.Errors, error => error.Contains("unnecessary unconditional goto", StringComparison.OrdinalIgnoreCase));
+    }
+
     private static string CreateTempProjectFolder()
     {
         var projectFolder = Path.Combine(Path.GetTempPath(), $"orchestrator-validator-{Guid.NewGuid():N}");

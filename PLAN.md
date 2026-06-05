@@ -2,39 +2,44 @@
 
 ## 1. Goal
 
-Build a C# `.NET 10` CLI tool that executes configurable AI workflows from a project folder.
+Build a C# `.NET 10` CLI tool that executes configurable AI workflows from a dedicated pgflow project folder while performing work against a separately chosen target working directory.
 
-A workflow project folder will contain:
+A pgflow project folder will contain:
+
 - a YAML workflow definition file
 - supporting files referenced by actions
 - optional templates, prompts, scripts, and assets
 - a `logs/` folder created automatically for execution history
 
 The orchestrator should:
-- load a workflow from a target folder
+
+- load a workflow from a pgflow project folder
+- treat that folder as the home for `orchestrator.yml`, prompts, scripts, and other workflow assets
 - resolve variables, inputs, outputs, and environment variables
-- execute actions in order
+- execute actions in order against a target working directory supplied at runtime
 - support initial action types:
   - `script` for `bash` or `pwsh`
   - `githubCopilot` for prompting GitHub Copilot through the GitHub Copilot SDK
-- persist detailed execution logs per run
+- persist detailed execution logs per run under the pgflow project folder
 
 ---
 
 ## 2. Core Product Vision
 
 The tool should feel like a lightweight mix of:
+
 - GitHub Actions workflow concepts
 - local task orchestration
 - AI-assisted automation
 
-The main difference from GitHub Actions is that this runs locally against a project folder and can use AI actions as first-class workflow steps.
+The main difference from GitHub Actions is that pgflow itself is defined in a reusable local harness folder, while the actual work can target a different repository or content folder at runtime. This allows pgflow to act as an AI harness for advanced AI-enabled workflows across many projects.
 
 ---
 
 ## 3. Primary Use Cases
 
 ### Initial use cases
+
 - Run local automation workflows against a repository or content folder
 - Generate or transform files with Copilot prompts
 - Run scripts before and after AI actions
@@ -42,6 +47,7 @@ The main difference from GitHub Actions is that this runs locally against a proj
 - Create repeatable local AI pipelines with logs and reproducibility
 
 ### Example scenarios
+
 - Analyze a codebase, then generate a report
 - Run a build script, ask Copilot to fix issues, then run tests again
 - Generate docs from source files
@@ -52,21 +58,26 @@ The main difference from GitHub Actions is that this runs locally against a proj
 ## 4. Recommended MVP Scope
 
 ### In scope for v1
+
 - Single CLI application
-- Point CLI at a workflow project folder
-- Load one YAML config file (for example `orchestrator.yml`)
-- Sequential execution of actions with explicit transitions
+- Point CLI at a pgflow project folder
+- Load one YAML config file (for example `orchestrator.yml`) from that pgflow project folder
+- Accept a separate target working directory at runtime through `--workdir <path>` and optionally as a positional argument
+- Default the target working directory to the current shell directory when not supplied
+- Sequential execution of actions in workflow order by default
 - Conditional action execution similar to GitHub Actions
+- Optional `next` rules to override normal sequencing only when the next action should not be the next one defined
 - Controlled workflow loops by jumping back to a prior action when conditions match
 - Variable resolution
 - Environment variable lookup
 - Action inputs and outputs
 - `script` action
 - `githubCopilot` action
-- Structured logs on disk
+- Structured logs on disk under the pgflow project folder
 - Exit code based on workflow success/failure
 
 ### Out of scope for v1
+
 - Parallel actions
 - Matrix builds
 - Remote execution
@@ -84,20 +95,24 @@ The main difference from GitHub Actions is that this runs locally against a proj
 ```mermaid
 flowchart TD
     CLI[CLI Entry Point] --> Config[Workflow Loader + YAML Parser]
+    CLI --> Target[Target Working Directory Resolver]
     Config --> Validator[Schema + Semantic Validator]
     Validator --> Runtime[Execution Engine]
+    Target --> Runtime
     Runtime --> Vars[Variable Resolver]
     Runtime --> Script[Script Action Runner]
     Runtime --> Copilot[GitHub Copilot Action Runner]
     Runtime --> Context[Execution Context + Outputs]
     Runtime --> Logs[Log Writer]
-    Logs --> Files[logs/<run-id>/]
+    Logs --> Files[pgflow-project/logs/<run-id>/]
 ```
 
 ### Main layers
+
 1. **CLI Layer**
    - command parsing
-   - folder selection
+   - pgflow project folder selection
+   - target working directory selection
    - options such as dry run / verbose / log level
 
 2. **Configuration Layer**
@@ -145,11 +160,13 @@ Recommended repository layout:
 ### Project responsibilities
 
 #### `Powergentic.AI.Orchestrator.Cli`
+
 - `System.CommandLine` based CLI
 - commands/options
 - startup and dependency injection
 
 #### `Powergentic.AI.Orchestrator.Core`
+
 - workflow domain models
 - execution engine
 - variable resolution
@@ -157,34 +174,38 @@ Recommended repository layout:
 - context and result models
 
 #### `Powergentic.AI.Orchestrator.Actions.Script`
+
 - bash/pwsh execution
 - process output capture
 - exit code handling
 
 #### `Powergentic.AI.Orchestrator.Actions.GitHubCopilot`
+
 - adapter over GitHub Copilot SDK
 - prompt submission
 - result parsing
 - file/artifact capture if needed
 
 #### `Powergentic.AI.Orchestrator.Yaml`
+
 - YAML parsing
 - schema mapping
 - validation helpers
 
 #### `Powergentic.AI.Orchestrator.Logging`
+
 - console logging
 - JSON log/event writer
 - run folder creation
 
 ---
 
-## 7. Workflow Project Folder Design
+## 7. Pgflow Project Folder and Target Working Directory Design
 
-A workflow project folder might look like this:
+A pgflow project folder might look like this:
 
 ```text
-my-workflow-project/
+my-pgflow-harness/
   orchestrator.yml
   prompts/
     review.prompt.md
@@ -202,10 +223,17 @@ my-workflow-project/
         02-review.json
 ```
 
+A typical invocation might then target a different repository or content folder as the working directory for the run.
+
 ### Conventions
+
 - `orchestrator.yml` is the default config filename
 - `logs/` is ignored by workflow logic except as output storage
-- relative file references resolve from the workflow project folder
+- workflow asset references such as `promptFile`, `path`, `file`, templates, and local assets resolve from the pgflow project folder
+- action execution defaults to the target working directory selected for the run
+- relative `workingDirectory` values on actions should resolve from the target working directory unless an absolute path is supplied
+
+This separation is a core product behavior: pgflow acts as the reusable AI harness, and the target working directory is the project being operated on.
 
 ---
 
@@ -214,6 +242,7 @@ my-workflow-project/
 ## Top-level design
 
 Suggested top-level sections:
+
 - `name`
 - `description`
 - `version`
@@ -229,7 +258,7 @@ name: Code Review Workflow
 version: 1
 variables:
   reportFile: output/review.md
-  targetPath: ${ env.PROJECT_PATH }
+  targetPath: ${ runtime.targetWorkingDirectory }
   enableReview: true
 
 env:
@@ -258,15 +287,15 @@ actions:
       promptFile: prompts/review.prompt.md
       inputs:
         fileListPath: ${ actions.setup.outputs.fileList }
-        targetPath: ${ variables.targetPath }
+        projectFolder: ${ runtime.projectFolder }
+        targetPath: ${ runtime.targetWorkingDirectory }
       writeResponseTo: ${ variables.reportFile }
     outputs:
       reportPath: ${ variables.reportFile }
       needsChanges: ${ actions.review.outputs.needsChanges }
     next:
-      - when: ${{ actions.review.outputs.needsChanges == 'true' }}
-        goto: fix
-      - goto: done
+      - when: ${{ actions.review.outputs.needsChanges != 'true' }}
+        goto: done
 
   - id: fix
     name: Apply fixes
@@ -274,13 +303,12 @@ actions:
     uses: githubCopilot
     with:
       prompt: |
-        Update the project at ${ variables.targetPath } using the findings in ${ variables.reportFile }.
+        Update the project at ${ runtime.targetWorkingDirectory } using the findings in ${ variables.reportFile }.
     outputs:
       retryReview: ${ actions.fix.outputs.retryReview }
     next:
       - when: ${{ actions.fix.outputs.retryReview == 'true' }}
         goto: review
-      - goto: done
 
   - id: done
     name: Finish
@@ -292,11 +320,16 @@ actions:
 ```
 
 ### Notes
+
 - `uses` identifies the action type
 - `with` contains action-specific parameters
 - `if` allows GitHub Actions-like conditional execution for each action
-- `next` defines explicit control-flow transitions after an action completes
-- if `next` is omitted, execution falls through to the next action in file order
+- actions run in the order they are defined by default
+- if an action is skipped because its `if` condition is false, execution continues to the next action in file order
+- `next` is an optional override mechanism for conditional branching or non-sequential jumps
+- a `next.when` rule can redirect execution when its condition matches
+- if no `next.when` rule matches, execution falls through to the next action in file order
+- unconditional `goto` should only be used when the intended next action is not the next one defined, such as an explicit branch or loop
 - `goto` may point to a previous action to form a loop
 - workflow-level safeguards such as `maxTransitions` and `maxVisitsPerAction` prevent accidental infinite loops
 - expressions should support references to:
@@ -313,21 +346,27 @@ actions:
 Use two expression styles:
 
 ### String interpolation syntax
+
 For values such as paths, prompts, env entries, and action inputs:
+
 - `${ variables.name }`
 - `${ env.MY_VAR }`
 - `${ actions.step1.outputs.result }`
 - `${ runtime.projectFolder }`
+- `${ runtime.targetWorkingDirectory }`
 - `${ runtime.runId }`
 
 ### Conditional expression syntax
+
 For `if` and `next.when`, use a GitHub Actions-like boolean expression form:
+
 - `${{ variables.enableReview == true }}`
 - `${{ actions.review.outputs.needsChanges == 'true' }}`
 - `${{ success() && env.MODE != 'dry-run' }}`
 - `${{ always() }}`
 
 ### Supported condition features for MVP
+
 - equality and inequality: `==`, `!=`
 - boolean operators: `&&`, `||`, `!`
 - parentheses
@@ -338,12 +377,14 @@ For `if` and `next.when`, use a GitHub Actions-like boolean expression form:
   - `always()`
 
 ### Resolution order
+
 1. runtime values
 2. workflow variables
 3. environment variables
 4. completed action outputs and statuses
 
 ### Rules
+
 - unresolved expressions should fail validation or execution with clear errors
 - action outputs and statuses are only available after that action completes
 - interpolation expressions should stay string-oriented
@@ -357,8 +398,10 @@ Use **string templating for values** and a **small, explicit boolean condition l
 ## 10. Execution Context Design
 
 The execution engine should maintain a runtime context object containing:
+
 - workflow metadata
-- project folder path
+- pgflow project folder path
+- target working directory path
 - run id
 - start/end timestamps
 - resolved variables
@@ -371,6 +414,7 @@ The execution engine should maintain a runtime context object containing:
 - logger handles
 
 ### Suggested core types
+
 - `WorkflowDefinition`
 - `WorkflowExecutionOptions`
 - `WorkflowActionDefinition`
@@ -388,25 +432,39 @@ The execution engine should maintain a runtime context object containing:
 Define a shared interface for all action runners.
 
 ### Suggested shape
+
 - `bool CanRun(string actionType)`
 - `Task<ActionResult> RunAsync(ActionExecutionContext context, CancellationToken cancellationToken)`
 
 ### Action-level control flow metadata
+
 Each action definition should support:
+
 - `if`: optional condition that determines whether the action runs, similar to GitHub Actions
-- `next`: optional ordered list of conditional transitions
-- default fallthrough to the next action in file order when no `next` rule matches
+- normal sequential fallthrough to the next action in file order
+- `next`: optional ordered list of transitions that override normal sequencing when needed
 
 Each `next` entry should support:
+
 - `when`: optional condition expression
 - `goto`: target action id
 
+Control-flow rules should be:
+
+- if `if` evaluates to `false`, mark the action as `skipped` and continue to the next action in file order
+- after a completed action, evaluate `next` entries in order
+- execute the first matching `next.when` transition
+- if no `next.when` rule matches, continue to the next action in file order
+- allow unconditional `goto` only when the target action is not the next action in file order
+
 This allows workflows to:
+
 - skip actions conditionally
-- branch to another action
+- branch to another action only when needed
 - jump back to a previous action and form a loop
 
 ### `ActionResult` should include
+
 - success/failure
 - execution status such as `succeeded`, `failed`, or `skipped`
 - exit code or status code
@@ -423,23 +481,28 @@ This contract allows future actions to be added cleanly while preserving runtime
 ## 12. Script Action Design
 
 ## Supported shells
+
 - `bash`
 - `pwsh`
 
 ### Inputs
 Suggested `with` fields:
+
 - `shell`: `bash` or `pwsh`
 - `run`: inline script text
 - `file`: optional script file path instead of inline text
-- `path`: optional script path within the workflow project folder
+- `path`: optional script path within the pgflow project folder
 - `workingDirectory`: optional relative/absolute path
 - `environment`: optional env overrides
 - `failOnNonZeroExit`: default `true`
 
 ### Behavior
+
 - support either inline script content (`run`) or a script file reference (`file`/`path`)
-- allow script files that live inside the workflow project folder, such as `scripts/setup.sh` or `scripts/summarize.ps1`
-- treat relative script paths as relative to the workflow project folder
+- allow script files that live inside the pgflow project folder, such as `scripts/setup.sh` or `scripts/summarize.ps1`
+- treat relative script paths as relative to the pgflow project folder
+- default script execution to the target working directory for the run
+- treat a relative `workingDirectory` override as relative to the target working directory
 - validate that referenced script files exist before execution
 - resolve variables before execution
 - create temp script file for inline script if needed
@@ -449,6 +512,7 @@ Suggested `with` fields:
 - support output extraction
 
 ### Output strategy options
+
 For MVP, support one or both:
 
 1. **Explicit output mapping from files**
@@ -461,6 +525,7 @@ For MVP, support one or both:
    - runtime parses and registers outputs
 
 ### Recommendation
+
 Implement `ORCHESTRATOR_OUTPUT` for the best GitHub Actions-like experience.
 
 ---
@@ -470,9 +535,11 @@ Implement `ORCHESTRATOR_OUTPUT` for the best GitHub Actions-like experience.
 This action should wrap the GitHub Copilot SDK behind an internal abstraction so the runtime is not tightly coupled to SDK details.
 
 ### Inputs
+
 Suggested `with` fields:
+
 - `prompt`: inline prompt text
-- `promptFile`: path to prompt template file
+- `promptFile`: path to prompt template file in the pgflow project folder
 - `inputs`: dictionary of prompt variables
 - `model`: optional model hint if SDK supports it
 - `workingDirectory`: optional project context path
@@ -481,9 +548,13 @@ Suggested `with` fields:
 - `conversationId`: optional future extension
 
 ### Behavior
+
 - load prompt from inline text or file
+- treat relative `promptFile` paths as relative to the pgflow project folder
 - resolve template variables
-- invoke Copilot SDK
+- default the Copilot working context to the target working directory for the run
+- treat a relative `workingDirectory` override as relative to the target working directory
+- invoke Copilot SDK against the target working directory context unless overridden
 - capture response text and metadata
 - optionally write response to file
 - return outputs such as:
@@ -493,7 +564,9 @@ Suggested `with` fields:
   - `conversationId` if available
 
 ### Important implementation note
+
 The exact SDK API surface may vary. The design should isolate this behind:
+
 - `ICopilotClient`
 - `CopilotPromptRequest`
 - `CopilotPromptResponse`
@@ -504,7 +577,7 @@ This protects the rest of the system if SDK details change.
 
 ## 14. Logging and Run History Design
 
-Each workflow execution should create a unique run folder under `logs/`.
+Each workflow execution should create a unique run folder under the pgflow project folder's `logs/` directory.
 
 ### Suggested structure
 
@@ -522,6 +595,7 @@ logs/
 ```
 
 ### What to record
+
 - original workflow file path
 - resolved workflow snapshot
 - start/end times
@@ -533,7 +607,9 @@ logs/
 - exception details and stack traces for failures
 
 ### Recommendation
+
 Use both:
+
 - human-readable console logging
 - structured JSON logs for machine analysis
 
@@ -544,10 +620,11 @@ Use both:
 Validation should happen before execution where possible.
 
 ### Validation phases
+
 1. **Schema validation**
    - required fields present
    - types are correct
-   - `if`, `next`, `goto`, and execution guard fields have valid shapes
+   - `if`, `next`, `when`, `goto`, and execution guard fields have valid shapes
 
 2. **Semantic validation**
    - unique action IDs
@@ -557,6 +634,7 @@ Validation should happen before execution where possible.
    - shell values are valid
    - all `goto` targets exist
    - `startAt` points to a valid action id when configured
+   - reject unconditional `goto` entries that point to the next action in file order because normal sequencing already handles that case
    - loop guard values such as `maxTransitions` and `maxVisitsPerAction` are positive and reasonable
    - detect obviously invalid control-flow definitions such as dead targets or unconditional self-loops without safeguards
 
@@ -566,7 +644,9 @@ Validation should happen before execution where possible.
    - loop guard thresholds are enforced during execution
 
 ### Error quality requirement
+
 Validation errors should be precise and include:
+
 - workflow file
 - action id/name
 - field path
@@ -580,14 +660,16 @@ Validation errors should be precise and include:
 ### Recommended commands
 
 ```text
-pgflow run <project-folder>
+pgflow run <project-folder> [target-working-directory]
 pgflow validate <project-folder>
 pgflow init <project-folder>
 pgflow logs <project-folder> [--latest]
 ```
 
 ### Recommended options
+
 - `--workflow <file>` override default workflow filename
+- `--workdir <path>` override the target working directory for `run`
 - `--var key=value` override workflow variables
 - `--env key=value` inject/override env values for a run
 - `--dry-run` resolve and validate without executing actions
@@ -595,10 +677,11 @@ pgflow logs <project-folder> [--latest]
 - `--json`
 
 ### Command behavior
-- `run`: validate then execute
+
+- `run`: validate the workflow from the pgflow project folder, determine the target working directory from `--workdir`, positional argument, or current directory, then execute
 - `validate`: parse and validate only
 - `init`: scaffold a sample workflow project
-- `logs`: show latest run summary or a selected run
+- `logs`: show latest run summary or a selected run from the pgflow project folder
 
 ---
 
@@ -607,6 +690,7 @@ pgflow logs <project-folder> [--latest]
 Use a versioned workflow schema.
 
 ### Recommendation
+
 Include:
 
 ```yaml
@@ -616,6 +700,7 @@ version: 1
 This allows future evolution without breaking old workflows.
 
 Possible later additions:
+
 - advanced condition functions and richer expressions
 - retries
 - parallel groups
@@ -629,6 +714,7 @@ Possible later additions:
 ## 18. Suggested Internal Domain Model
 
 ### WorkflowDefinition
+
 - `Name`
 - `Description`
 - `Version`
@@ -638,11 +724,13 @@ Possible later additions:
 - `Actions`
 
 ### WorkflowExecutionOptions
+
 - `StartAt`
 - `MaxTransitions`
 - `MaxVisitsPerAction`
 
 ### WorkflowActionDefinition
+
 - `Id`
 - `Name`
 - `Uses`
@@ -652,10 +740,12 @@ Possible later additions:
 - `Next`
 
 ### WorkflowTransitionDefinition
+
 - `When`
 - `Goto`
 
 ### WorkflowRunResult
+
 - `RunId`
 - `Succeeded`
 - `StartedAt`
@@ -669,6 +759,7 @@ Possible later additions:
 ## 19. Dependencies to Consider
 
 ### Core packages
+
 - `System.CommandLine`
 - `Microsoft.Extensions.Hosting`
 - `Microsoft.Extensions.DependencyInjection`
@@ -677,11 +768,13 @@ Possible later additions:
 - `FluentValidation` or custom validation layer
 
 ### Testing
+
 - `xUnit`
 - `FluentAssertions`
 - `Verify` for snapshot tests
 
 ### Copilot integration
+
 - GitHub Copilot SDK package(s), depending on the supported official API surface at implementation time
 
 ---
@@ -691,6 +784,7 @@ Possible later additions:
 This tool executes scripts and AI-driven instructions locally, so safety matters.
 
 ### MVP safeguards
+
 - clearly show project folder and workflow file being executed
 - log all resolved action definitions except sensitive values
 - redact sensitive environment variables in logs
@@ -698,6 +792,7 @@ This tool executes scripts and AI-driven instructions locally, so safety matters
 - avoid automatically executing generated scripts unless explicitly configured
 
 ### Later safeguards
+
 - allow-list action types
 - prompt approval mode for dangerous actions
 - restricted mode / no-network mode
@@ -708,6 +803,7 @@ This tool executes scripts and AI-driven instructions locally, so safety matters
 ## 21. Testing Strategy
 
 ### Unit tests
+
 - YAML parsing
 - variable resolution
 - action dependency resolution
@@ -715,12 +811,14 @@ This tool executes scripts and AI-driven instructions locally, so safety matters
 - output parsing from scripts
 
 ### Integration tests
+
 - run sample workflows end-to-end
 - script action on macOS/Linux/Windows where possible
 - Copilot action mocked through `ICopilotClient`
 - validation failures and log generation
 
 ### Snapshot tests
+
 - resolved workflow output
 - JSON run summaries
 - action output mapping behavior
@@ -730,6 +828,7 @@ This tool executes scripts and AI-driven instructions locally, so safety matters
 ## 22. Implementation Phases
 
 ### Phase 1 - Foundation
+
 - create solution and projects
 - set up CLI host and DI
 - define domain models
@@ -737,20 +836,23 @@ This tool executes scripts and AI-driven instructions locally, so safety matters
 - add validation pipeline
 
 ### Phase 2 - Runtime Engine
+
 - implement execution context
-- implement sequential action dispatcher with explicit transitions
-- implement `if` evaluation and `next/goto` resolution
+- implement sequential action dispatcher with file-order fallthrough by default
+- implement `if` evaluation, skipped-action handling, and `next/goto` override resolution
 - implement loop guard enforcement (`maxTransitions`, `maxVisitsPerAction`)
 - implement result aggregation
 - implement logging/run folder creation
 
 ### Phase 3 - Script Action
+
 - add bash/pwsh runners
 - capture stdout/stderr
 - add output file parsing
 - add tests
 
 ### Phase 4 - GitHub Copilot Action
+
 - add Copilot client abstraction
 - integrate SDK
 - support prompt file/input substitution
@@ -758,11 +860,13 @@ This tool executes scripts and AI-driven instructions locally, so safety matters
 - add mocked tests
 
 ### Phase 5 - CLI Experience
+
 - add `validate`, `run`, `init`, `logs`
 - add verbose/JSON output modes
 - add sample workflow projects
 
 ### Phase 6 - Hardening
+
 - improve diagnostics
 - redact secrets
 - improve schema docs
@@ -774,14 +878,16 @@ This tool executes scripts and AI-driven instructions locally, so safety matters
 
 To keep the first version focused, make these explicit choices:
 
-1. **Single workflow file per project folder**
-2. **Sequential execution with explicit conditional transitions**
-3. **Limited GitHub Actions-like condition language, not a full expression engine**
-4. **Loops are allowed only through explicit `goto` transitions with runtime safeguards**
-5. **Action outputs are dictionary-based strings initially**
-6. **Copilot integration behind an internal adapter**
-7. **Logs stored per run in `logs/<run-id>/`**
-8. **Relative paths resolve from the project folder**
+1. **Single workflow file per pgflow project folder**
+2. **A separate target working directory is selected at runtime**
+3. **Actions execute sequentially in file order by default**
+4. **`next` is an override for conditional or non-sequential transitions, not the normal way to move forward**
+5. **Limited GitHub Actions-like condition language, not a full expression engine**
+6. **Loops are allowed only through explicit `goto` transitions with runtime safeguards**
+7. **Action outputs are dictionary-based strings initially**
+8. **Copilot integration behind an internal adapter**
+9. **Logs stored per run in the pgflow project folder at `logs/<run-id>/`**
+10. **Workflow asset paths resolve from the pgflow project folder, while action execution defaults to the target working directory**
 
 These choices reduce complexity while preserving a strong foundation.
 
@@ -798,12 +904,14 @@ These choices reduce complexity while preserving a strong foundation.
 7. How should auth and SDK session state be handled locally?
 8. What should the default loop safeguards be for `maxTransitions` and `maxVisitsPerAction`?
 9. Should skipped actions count toward loop/transition totals?
+10. Should action output files such as `writeResponseTo` resolve relative to the target working directory, the pgflow project folder, or be configurable per field?
 
 ---
 
 ## 25. Recommended Next Step
 
 Start by implementing the non-AI foundation first:
+
 - solution structure
 - CLI
 - YAML parser

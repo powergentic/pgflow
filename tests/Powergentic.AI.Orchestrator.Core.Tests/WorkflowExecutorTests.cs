@@ -87,9 +87,11 @@ public class WorkflowExecutorTests
 
         try
         {
-            var result = await executor.ExecuteAsync(projectFolder, workflowFilePath);
+            var result = await executor.ExecuteAsync(projectFolder, projectFolder, workflowFilePath);
 
             Assert.True(result.Succeeded);
+            Assert.Equal(projectFolder, result.ProjectFolder);
+            Assert.Equal(projectFolder, result.TargetWorkingDirectory);
             Assert.Equal(3, result.ActionResults.Count);
             Assert.Equal(ActionExecutionStatus.Skipped, result.ActionResults.Single(r => r.ActionId == "skipMe").Status);
             Assert.Equal(3, result.TransitionCount);
@@ -148,7 +150,7 @@ public class WorkflowExecutorTests
 
         try
         {
-            var result = await executor.ExecuteAsync(projectFolder, workflowFilePath);
+            var result = await executor.ExecuteAsync(projectFolder, projectFolder, workflowFilePath);
 
             Assert.False(result.Succeeded);
             Assert.Single(result.ActionResults);
@@ -205,7 +207,7 @@ public class WorkflowExecutorTests
 
         try
         {
-            await Assert.ThrowsAsync<InvalidOperationException>(() => executor.ExecuteAsync(projectFolder, workflowFilePath));
+            await Assert.ThrowsAsync<InvalidOperationException>(() => executor.ExecuteAsync(projectFolder, projectFolder, workflowFilePath));
         }
         finally
         {
@@ -266,13 +268,15 @@ public class WorkflowExecutorTests
         {
             var result = await executor.ExecuteAsync(
                 projectFolder,
+                projectFolder,
                 workflowFilePath,
                 new Dictionary<string, object?> { ["message"] = "overridden" },
                 new Dictionary<string, string?> { ["EXTERNAL_FLAG"] = "enabled" });
 
             Assert.True(result.Succeeded);
             Assert.NotNull(capturedContext);
-            Assert.Equal("overridden", capturedContext!.ExecutionContext.Variables["message"]);
+            Assert.Equal(projectFolder, capturedContext!.ExecutionContext.TargetWorkingDirectory);
+            Assert.Equal("overridden", capturedContext.ExecutionContext.Variables["message"]);
             Assert.Equal("overridden", capturedContext.ExecutionContext.Environment["MODE"]);
             Assert.Equal("enabled", capturedContext.ExecutionContext.Environment["EXTERNAL_FLAG"]);
         }

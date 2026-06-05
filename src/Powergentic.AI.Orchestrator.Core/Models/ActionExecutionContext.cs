@@ -14,6 +14,7 @@ public sealed class ActionExecutionContext
     public required ILogger Logger { get; init; }
 
     public string ProjectFolder => ExecutionContext.ProjectFolder;
+    public string TargetWorkingDirectory => ExecutionContext.TargetWorkingDirectory;
     public string RunId => ExecutionContext.RunId;
     public IReadOnlyDictionary<string, string?> Environment => ExecutionContext.Environment;
 

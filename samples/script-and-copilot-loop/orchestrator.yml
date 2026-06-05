@@ -12,8 +12,6 @@ actions:
     with:
       shell: bash
       path: scripts/prepare.sh
-    next:
-      - goto: review
 
   - id: review
     if: ${{ success() && variables.needsReview == true }}
@@ -22,13 +20,13 @@ actions:
       promptFile: prompts/review.prompt.md
       inputs:
         statusFile: ${ actions.prepare.outputs.statusFile }
+        targetPath: ${ runtime.targetWorkingDirectory }
       writeResponseTo: output/review.txt
     outputs:
       responseFile: ${ actions.review.outputs.responseFile }
     next:
-      - when: ${{ actions.review.outputs.responseFile != null }}
-        goto: done
-      - goto: prepare
+      - when: ${{ actions.review.outputs.responseFile == null }}
+        goto: prepare
 
   - id: done
     if: ${{ always() }}

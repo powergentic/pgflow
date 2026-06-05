@@ -24,6 +24,7 @@ public sealed class CliApplicationTests
         Assert.Equal(0, exitCode);
         Assert.Contains("██████╗", stdout, StringComparison.Ordinal);
         Assert.Contains("Examples:", stdout, StringComparison.Ordinal);
+        Assert.Contains("--workdir <path>", stdout, StringComparison.Ordinal);
         Assert.Equal(string.Empty, stderr);
     }
 
@@ -128,6 +129,8 @@ actions:
 {
   "runId": "2026-06-02T23-52-57Z_test",
   "workflowName": "Basic Script Workflow",
+  "projectFolder": "PROJECT_FOLDER",
+  "targetWorkingDirectory": "TARGET_FOLDER",
   "logFolder": "LOG_FOLDER",
   "succeeded": true,
   "startedAt": "2026-06-02T23:52:57+00:00",
@@ -149,7 +152,10 @@ actions:
     }
   ]
 }
-""".Replace("LOG_FOLDER", runFolder.Replace("\\", "\\\\"), StringComparison.Ordinal));
+"""
+            .Replace("PROJECT_FOLDER", projectFolder.Replace("\\", "\\\\"), StringComparison.Ordinal)
+            .Replace("TARGET_FOLDER", projectFolder.Replace("\\", "\\\\"), StringComparison.Ordinal)
+            .Replace("LOG_FOLDER", runFolder.Replace("\\", "\\\\"), StringComparison.Ordinal));
 
         try
         {

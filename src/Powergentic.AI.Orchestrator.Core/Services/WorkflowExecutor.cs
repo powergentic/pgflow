@@ -15,6 +15,7 @@ public sealed class WorkflowExecutor(
 {
     public async Task<WorkflowRunResult> ExecuteAsync(
         string projectFolder,
+        string targetWorkingDirectory,
         string workflowFilePath,
         IReadOnlyDictionary<string, object?>? variableOverrides = null,
         IReadOnlyDictionary<string, string?>? environmentOverrides = null,
@@ -44,6 +45,7 @@ public sealed class WorkflowExecutor(
         }
 
         var variables = new Dictionary<string, object?>(workflow.Variables, StringComparer.OrdinalIgnoreCase);
+        var startedAt = DateTimeOffset.UtcNow;
 
         foreach (var env in workflow.Env)
         {
@@ -51,12 +53,13 @@ public sealed class WorkflowExecutor(
             {
                 Workflow = workflow,
                 ProjectFolder = projectFolder,
+                TargetWorkingDirectory = targetWorkingDirectory,
                 WorkflowFilePath = workflowFilePath,
                 RunId = runId,
                 LogFolder = paths.RunFolder,
                 Variables = variables,
                 Environment = environment,
-                StartedAt = DateTimeOffset.UtcNow,
+                StartedAt = startedAt,
             });
         }
 
@@ -64,12 +67,13 @@ public sealed class WorkflowExecutor(
         {
             Workflow = workflow,
             ProjectFolder = projectFolder,
+            TargetWorkingDirectory = targetWorkingDirectory,
             WorkflowFilePath = workflowFilePath,
             RunId = runId,
             LogFolder = paths.RunFolder,
             Variables = variables,
             Environment = environment,
-            StartedAt = DateTimeOffset.UtcNow,
+            StartedAt = startedAt,
         };
 
         await logWriter.WriteResolvedWorkflowAsync(paths, workflow, cancellationToken);
@@ -170,6 +174,8 @@ public sealed class WorkflowExecutor(
         {
             RunId = context.RunId,
             WorkflowName = workflow.Name,
+            ProjectFolder = context.ProjectFolder,
+            TargetWorkingDirectory = context.TargetWorkingDirectory,
             LogFolder = paths.RunFolder,
             StartedAt = context.StartedAt,
             CompletedAt = context.CompletedAt.Value,

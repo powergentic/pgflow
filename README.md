@@ -1,36 +1,30 @@
 # Powergentic AI Workflow Orchestrator CLI
 
-`pgflow` is a local workflow orchestrator for running scripted steps and GitHub Copilot-driven steps from a project folder.
-
-It is designed to help you automate repeatable development workflows such as preparing files, running scripts, looping over actions, and capturing run logs.
+`pgflow` is a local workflow orchestrator for running scripted steps and GitHub Copilot-driven steps from a dedicated pgflow project folder against a separate target working directory.
 
 ![pgflow screenshot](docs/images/pgflow-screenshot.png)
 
 ## What pgflow does
 
-- Loads a workflow from `orchestrator.yml`
-- Resolves variables, environment values, action inputs, and action outputs
+- Loads a workflow from `orchestrator.yml` in a pgflow project folder
+- Resolves workflow assets like prompt files and scripts from that project folder
+- Executes actions against a target working directory chosen at run time
 - Runs `script` actions with `bash` or `pwsh`
-- Runs `githubCopilot` actions through `GitHub.Copilot.SDK`
-- Supports conditional execution with `if`, `next`, and `goto`
-- Writes per-run logs under the target project folder
+- Runs `githubCopilot` actions through the internal Copilot adapter
+- Executes actions sequentially by default
+- Uses `next` only when a workflow needs to override the default next action
+- Writes per-run logs under the pgflow project folder
 
 ## Requirements
 
-To build and use `pgflow`, you need:
-
 - .NET SDK 10.0 or newer
-- `bash` for shell-based workflows on macOS/Linux, or `pwsh` for PowerShell-based workflows
+- `bash` on macOS/Linux or `pwsh` for PowerShell-based workflows
 - GitHub Copilot access for workflows that use `githubCopilot`
-- optionally, `GITHUB_TOKEN` if token-based auth is preferred
+- optionally `GITHUB_TOKEN` if token-based auth is preferred
 
 ## Quick start
 
 From the repository root:
-
-1. Build the solution
-2. Run the tests
-3. Run a sample workflow
 
 ```bash
 dotnet build Powergentic.AI.Orchestrator.slnx
@@ -38,61 +32,36 @@ dotnet test Powergentic.AI.Orchestrator.slnx
 dotnet run --project src/Powergentic.AI.Orchestrator.Cli -- run samples/basic-script
 ```
 
-If you already built the CLI, you can also run the produced executable directly:
+The last command uses `samples/basic-script` as both the pgflow project folder and the target working directory because the current shell directory is used by default when `--workdir` is not supplied.
 
-```bash
-./src/Powergentic.AI.Orchestrator.Cli/bin/Debug/net10.0/pgflow run samples/basic-script
-```
-
-## Building pgflow
-
-Build from the repository root:
-
-```bash
-dotnet build Powergentic.AI.Orchestrator.slnx
-```
-
-Run the test suite:
-
-```bash
-dotnet test Powergentic.AI.Orchestrator.slnx
-```
-
-Run the CLI during development:
-
-```bash
-dotnet run --project src/Powergentic.AI.Orchestrator.Cli -- --help
-```
-
-## Using pgflow
-
-The CLI is named `pgflow`.
-
-General usage:
+## CLI usage
 
 ```text
 pgflow <command> [project-folder] [options]
-pgflow [project-folder] [workflow-file]
+pgflow run <project-folder> [target-working-directory] [options]
+pgflow [project-folder] [target-working-directory] [workflow-file]
 ```
 
 Defaults:
 
 - `project-folder` defaults to the current directory
+- `target-working-directory` defaults to the current shell directory for `run`
 - `workflow-file` defaults to `orchestrator.yml`
 
 ### Commands
 
-- `pgflow run [project-folder]` - validate and execute a workflow
+- `pgflow run [project-folder] [target-working-directory]` - validate and execute a workflow
 - `pgflow validate [project-folder]` - load and validate a workflow
 - `pgflow init [project-folder]` - scaffold a workflow project
 - `pgflow logs [project-folder]` - show the latest run summary or a selected run
 - `pgflow help` - show help information
+- `pgflow version` - show the current version
 
 ### Common options
 
 - `-h`, `--help` - show help information
-- `--version` - show the current pgflow version
 - `--workflow <file>` - override the default workflow file name
+- `--workdir <path>` - override the target working directory for `run`
 - `--var key=value` - override a workflow variable
 - `--env key=value` - inject or override an environment value
 - `--dry-run` - validate without executing actions
@@ -103,7 +72,7 @@ Defaults:
 - `--verbose` - enable verbose console logging
 - `--json` - emit JSON output
 
-### Common examples
+### Examples
 
 Validate a workflow:
 
@@ -111,10 +80,22 @@ Validate a workflow:
 pgflow validate samples/basic-script
 ```
 
-Run a workflow:
+Run a workflow against the current shell directory:
 
 ```bash
 pgflow run samples/basic-script
+```
+
+Run a workflow against another repository:
+
+```bash
+pgflow run samples/script-and-copilot-loop ../my-project
+```
+
+Run the same workflow with an explicit option instead:
+
+```bash
+pgflow run samples/script-and-copilot-loop --workdir ../my-project
 ```
 
 Run with variable and environment overrides:
@@ -123,52 +104,28 @@ Run with variable and environment overrides:
 pgflow run samples/basic-script --var greeting=Hello --env NAME=Chris
 ```
 
-Scaffold a new project:
+## Project folder versus target working directory
 
-```bash
-pgflow init my-flow
-```
+A pgflow project folder contains the reusable automation harness:
 
-Show logs for the latest run:
+- `orchestrator.yml`
+- prompt templates
+- helper scripts
+- logs
 
-```bash
-pgflow logs samples/basic-script --latest
-```
+The target working directory is the actual project or content folder the workflow should operate on.
 
-Show the installed pgflow version:
+Resolution rules:
 
-```bash
-pgflow --version
-```
+- workflow asset paths such as `promptFile`, `path`, and `file` resolve from the pgflow project folder
+- `script` and `githubCopilot` actions run in the target working directory by default
+- a relative `workingDirectory` override resolves from the target working directory
+- logs always go under `<project-folder>/logs/<run-id>/`
+- `githubCopilot.with.writeResponseTo` resolves from the target working directory
 
-## Getting started with a workflow
+## Workflow behavior
 
-A `pgflow` project usually starts with an `orchestrator.yml` file in the project folder.
-
-Example:
-
-```yaml
-name: Basic Demo
-version: 1
-variables:
-  greeting: Hello
-actions:
-  - id: hello
-    uses: script
-    with:
-      shell: bash
-      run: echo "${ variables.greeting } from pgflow"
-```
-
-Save that as `orchestrator.yml`, then run:
-
-```bash
-pgflow run .
-```
-
-## Workflow structure
-
-A workflow can contain these top-level fields:
+Top-level fields:
 
 - `name`
 - `description`
@@ -177,12 +134,6 @@ A workflow can contain these top-level fields:
 - `env`
 - `execution`
 - `actions`
-
-Common execution guard fields:
-
-- `execution.startAt`
-- `execution.maxTransitions`
-- `execution.maxVisitsPerAction`
 
 Common action fields:
 
@@ -193,6 +144,13 @@ Common action fields:
 - `with`
 - `outputs`
 - `next`
+
+Execution rules:
+
+- actions run in file order by default
+- if an action's `if` condition is false, that action is skipped and execution continues to the next action in file order
+- use `next.when` to branch conditionally
+- use `next.goto` only when the next action should not be the next action defined in the file
 
 ## Script actions
 
@@ -212,8 +170,8 @@ Supported `with` fields:
 
 - `shell`: `bash` or `pwsh`
 - `run`: inline script content
-- `file` or `path`: script file path
-- `workingDirectory`: optional working directory
+- `file` or `path`: script file path in the pgflow project folder
+- `workingDirectory`: optional override, resolved from the target working directory if relative
 - `environment`: extra environment variables
 - `failOnNonZeroExit`: defaults to `true`
 
@@ -221,6 +179,7 @@ Runtime environment variables exposed to scripts:
 
 - `ORCHESTRATOR_OUTPUT`
 - `ORCHESTRATOR_PROJECT_FOLDER`
+- `ORCHESTRATOR_TARGET_WORKING_DIRECTORY`
 - `ORCHESTRATOR_RUN_ID`
 
 Scripts can emit outputs by appending `key=value` lines to `$ORCHESTRATOR_OUTPUT`.
@@ -236,6 +195,7 @@ Example:
     promptFile: prompts/review.prompt.md
     inputs:
       statusFile: ${ actions.prepare.outputs.statusFile }
+      targetPath: ${ runtime.targetWorkingDirectory }
     writeResponseTo: output/review.txt
 ```
 
@@ -253,7 +213,17 @@ Supported `with` fields:
 
 Prompt placeholders support both `{{name}}` and `${name}` forms.
 
-## Logs and run output
+## Runtime expressions
+
+Useful runtime values include:
+
+- `${ runtime.projectFolder }`
+- `${ runtime.targetWorkingDirectory }`
+- `${ runtime.runId }`
+- `${ runtime.logFolder }`
+- `${ runtime.currentActionId }`
+
+## Logs
 
 Each run writes under `<project-folder>/logs/<run-id>/`.
 
@@ -264,39 +234,21 @@ Typical files include:
 - `actions/*.json`
 - script stdout/stderr files when applicable
 
-Use the CLI to inspect the latest run:
+Inspect the latest run with:
 
 ```bash
 pgflow logs <project-folder> --latest
 ```
 
-## Samples in this repository
+## Samples
 
 - `samples/basic-script` - minimal script-only workflow
-- `samples/script-and-copilot-loop` - script + Copilot loop example
-
-Try them with:
-
-```bash
-pgflow run samples/basic-script
-pgflow run samples/script-and-copilot-loop
-```
+- `samples/script-and-copilot-loop` - script + Copilot example that relies on sequential flow by default
 
 ## Solution layout
 
 - `src/Powergentic.AI.Orchestrator.Cli` - CLI entrypoint
 - `src/Powergentic.AI.Orchestrator.Core` - workflow models, validation, execution, logging
 - `src/Powergentic.AI.Orchestrator.Actions.Script` - local script runner
-- `src/Powergentic.AI.Orchestrator.Actions.GitHubCopilot` - Copilot action runner and SDK adapter
+- `src/Powergentic.AI.Orchestrator.Actions.GitHubCopilot` - Copilot action runner and adapter
 - `tests/Powergentic.AI.Orchestrator.Core.Tests` - unit tests
-
-## Next steps for new users
-
-A good path to get started is:
-
-1. build the solution
-2. run the tests
-3. run `samples/basic-script`
-4. inspect the generated logs
-5. scaffold a new flow with `pgflow init`
-6. adapt the sample workflow for your own project

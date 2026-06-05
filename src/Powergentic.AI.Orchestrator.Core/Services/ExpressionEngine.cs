@@ -55,7 +55,7 @@ public sealed class ExpressionEngine
         => source.ToDictionary(kvp => kvp.Key, kvp => InterpolateValue(kvp.Value, context), StringComparer.OrdinalIgnoreCase);
 
     public Dictionary<string, string?> ResolveOutputs(Dictionary<string, string?> source, ExecutionContextModel context)
-        => source.ToDictionary(kvp => kvp.Key, kvp => InterpolateString(kvp.Value, context), StringComparer.OrdinalIgnoreCase);
+        => source.ToDictionary(kvp => kvp.Key, kvp => (string?)InterpolateString(kvp.Value, context), StringComparer.OrdinalIgnoreCase);
 
     private bool EvaluateBooleanExpression(string expression, ExecutionContextModel context)
     {
@@ -153,6 +153,7 @@ public sealed class ExpressionEngine
             return trimmed[8..].ToLowerInvariant() switch
             {
                 "projectfolder" => context.ProjectFolder,
+                "targetworkingdirectory" => context.TargetWorkingDirectory,
                 "runid" => context.RunId,
                 "logfolder" => context.LogFolder,
                 "currentactionid" => context.CurrentActionId,

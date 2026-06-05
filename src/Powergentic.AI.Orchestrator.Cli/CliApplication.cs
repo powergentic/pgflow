@@ -48,8 +48,10 @@ public static class CliApplication
     private static async Task<int> RunWorkflowAsync(ParsedCommand command, CancellationToken cancellationToken)
     {
         var projectFolder = ResolveProjectFolder(command.ProjectFolder);
+        var targetWorkingDirectory = ResolveTargetWorkingDirectory(command.TargetWorkingDirectory);
         var workflowFile = ResolveWorkflowFile(projectFolder, command.WorkflowFile);
         EnsureProjectExists(projectFolder);
+        EnsureProjectExists(targetWorkingDirectory, "Target working directory");
         EnsureWorkflowExists(workflowFile);
 
         if (command.DryRun)
@@ -65,6 +67,7 @@ public static class CliApplication
         {
             var result = await executor.ExecuteAsync(
                 projectFolder,
+                targetWorkingDirectory,
                 workflowFile,
                 command.VariableOverrides,
                 command.EnvironmentOverrides,
@@ -76,9 +79,10 @@ public static class CliApplication
             else
             {
                 logger.LogInformation(
-                    "Workflow {WorkflowName} finished. Success={Success}. Logs={LogFolder}",
+                    "Workflow {WorkflowName} finished. Success={Success}. Target={TargetWorkingDirectory}. Logs={LogFolder}",
                     result.WorkflowName,
                     result.Succeeded,
+                    targetWorkingDirectory,
                     result.LogFolder);
             }
 
@@ -93,6 +97,7 @@ public static class CliApplication
                     succeeded = false,
                     command = "run",
                     projectFolder,
+                    targetWorkingDirectory,
                     workflowFile,
                     error = ex.Message,
                 });
@@ -349,6 +354,7 @@ public static class CliApplication
     {
         var positionals = new List<string>();
         string? workflowFile = null;
+        string? targetWorkingDirectory = null;
         string? runId = null;
         var dryRun = false;
         var verbose = false;
@@ -374,6 +380,12 @@ public static class CliApplication
                     break;
                 case var value when value.StartsWith("--workflow=", StringComparison.Ordinal):
                     workflowFile = value["--workflow=".Length..];
+                    break;
+                case "--workdir":
+                    targetWorkingDirectory = ReadRequiredValue(args, ref i, arg);
+                    break;
+                case var value when value.StartsWith("--workdir=", StringComparison.Ordinal):
+                    targetWorkingDirectory = value["--workdir=".Length..];
                     break;
                 case "--var":
                     AddOverride(variableOverrides, ReadRequiredValue(args, ref i, arg));
@@ -419,12 +431,24 @@ public static class CliApplication
         }
 
         var projectFolder = positionals.Count > 0 ? positionals[0] : null;
-        if (string.IsNullOrWhiteSpace(workflowFile) && (commandName is "run" or "validate") && positionals.Count > 1)
+        if (commandName == "run")
+        {
+            if (string.IsNullOrWhiteSpace(targetWorkingDirectory) && positionals.Count > 1)
+            {
+                targetWorkingDirectory = positionals[1];
+            }
+
+            if (string.IsNullOrWhiteSpace(workflowFile) && positionals.Count > 2)
+            {
+                workflowFile = positionals[2];
+            }
+        }
+        else if (string.IsNullOrWhiteSpace(workflowFile) && (commandName is "validate") && positionals.Count > 1)
         {
             workflowFile = positionals[1];
         }
 
-        return new ParsedCommand(commandName, projectFolder, workflowFile, dryRun, verbose, json, force, template, runId, variableOverrides, environmentOverrides);
+        return new ParsedCommand(commandName, projectFolder, targetWorkingDirectory, workflowFile, dryRun, verbose, json, force, template, runId, variableOverrides, environmentOverrides);
     }
 
     private static string ReadRequiredValue(string[] args, ref int index, string optionName)
@@ -498,6 +522,7 @@ public static class CliApplication
             "help",
             null,
             null,
+            null,
             false,
             false,
             false,
@@ -512,6 +537,7 @@ public static class CliApplication
             "version",
             null,
             null,
+            null,
             false,
             false,
             false,
@@ -524,6 +550,9 @@ public static class CliApplication
     private static string ResolveProjectFolder(string? projectFolder)
         => Path.GetFullPath(string.IsNullOrWhiteSpace(projectFolder) ? Environment.CurrentDirectory : projectFolder);
 
+    private static string ResolveTargetWorkingDirectory(string? targetWorkingDirectory)
+        => Path.GetFullPath(string.IsNullOrWhiteSpace(targetWorkingDirectory) ? Environment.CurrentDirectory : targetWorkingDirectory);
+
     private static string ResolveWorkflowFile(string projectFolder, string? workflowFile)
     {
         var file = string.IsNullOrWhiteSpace(workflowFile) ? "orchestrator.yml" : workflowFile;
@@ -532,11 +561,11 @@ public static class CliApplication
             : Path.GetFullPath(Path.Combine(projectFolder, file));
     }
 
-    private static void EnsureProjectExists(string projectFolder)
+    private static void EnsureProjectExists(string projectFolder, string label = "Project folder")
     {
         if (!Directory.Exists(projectFolder))
         {
-            throw new CliUsageException($"Project folder does not exist: {projectFolder}");
+            throw new CliUsageException($"{label} does not exist: {projectFolder}");
         }
     }
 
@@ -581,14 +610,14 @@ public static class CliApplication
             [
                 new ScaffoldFile(
                     "orchestrator.yml",
-                    "name: Script And Copilot Loop\nversion: 1\nvariables:\n  needsReview: true\nexecution:\n  startAt: prepare\n  maxTransitions: 10\n  maxVisitsPerAction: 4\nactions:\n  - id: prepare\n    uses: script\n    with:\n      shell: bash\n      path: scripts/prepare.sh\n    next:\n      - goto: review\n\n  - id: review\n    if: ${{ success() && variables.needsReview == true }}\n    uses: githubCopilot\n    with:\n      promptFile: prompts/review.prompt.md\n      inputs:\n        statusFile: ${ actions.prepare.outputs.statusFile }\n      writeResponseTo: output/review.txt\n    outputs:\n      responseFile: ${ actions.review.outputs.responseFile }\n    next:\n      - when: ${{ actions.review.outputs.responseFile != null }}\n        goto: done\n      - goto: prepare\n\n  - id: done\n    if: ${{ always() }}\n    uses: script\n    with:\n      shell: bash\n      run: echo \"done=true\" >> \"$ORCHESTRATOR_OUTPUT\"\n"),
+                    "name: Script And Copilot Loop\nversion: 1\nvariables:\n  needsReview: true\n  targetPath: ${ runtime.targetWorkingDirectory }\nexecution:\n  startAt: prepare\n  maxTransitions: 10\n  maxVisitsPerAction: 4\nactions:\n  - id: prepare\n    uses: script\n    with:\n      shell: bash\n      path: scripts/prepare.sh\n\n  - id: review\n    if: ${{ success() && variables.needsReview == true }}\n    uses: githubCopilot\n    with:\n      promptFile: prompts/review.prompt.md\n      inputs:\n        statusFile: ${ actions.prepare.outputs.statusFile }\n        targetPath: ${ runtime.targetWorkingDirectory }\n      writeResponseTo: output/review.txt\n    outputs:\n      responseFile: ${ actions.review.outputs.responseFile }\n    next:\n      - when: ${{ actions.review.outputs.responseFile == null }}\n        goto: prepare\n\n  - id: done\n    if: ${{ always() }}\n    uses: script\n    with:\n      shell: bash\n      run: echo \"done=true\" >> \"$ORCHESTRATOR_OUTPUT\"\n"),
                 new ScaffoldFile(
                     Path.Combine("scripts", "prepare.sh"),
                     "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p output\nprintf 'ready\\n' > output/status.txt\necho \"statusFile=output/status.txt\" >> \"$ORCHESTRATOR_OUTPUT\"\n",
                     MakeExecutable: true),
                 new ScaffoldFile(
                     Path.Combine("prompts", "review.prompt.md"),
-                    "Review the workflow status file at ${statusFile} and summarize what should happen next.\n"),
+                    "Review the workflow status file at ${statusFile} for the project in ${targetPath} and summarize what should happen next.\n"),
             ],
             _ => throw new CliUsageException("Unknown template. Supported templates: basic-script, script-and-copilot-loop.")
         };
@@ -672,7 +701,8 @@ public static class CliApplication
 
 Usage:
   pgflow <command> [project-folder] [options]
-  pgflow [project-folder] [workflow-file]
+  pgflow run <project-folder> [target-working-directory] [options]
+  pgflow [project-folder] [target-working-directory] [workflow-file]
 
 Commands:
   run                           Validate and execute a workflow.
@@ -685,6 +715,7 @@ Commands:
 Options:
   -h, --help                    Show help information.
   --workflow <file>             Override the default workflow file name.
+  --workdir <path>              Override the target working directory for run.
   --var key=value               Override a workflow variable.
   --env key=value               Inject or override an environment value.
   --dry-run                     Validate without executing actions.
@@ -697,6 +728,8 @@ Options:
 
 Examples:
   pgflow run samples/basic-script
+  pgflow run samples/script-and-copilot-loop ../my-project
+  pgflow run samples/script-and-copilot-loop --workdir ../my-project
   pgflow validate .
   pgflow logs samples/basic-script --latest
   pgflow version
@@ -706,6 +739,7 @@ Examples:
     private sealed record ParsedCommand(
         string Name,
         string? ProjectFolder,
+        string? TargetWorkingDirectory,
         string? WorkflowFile,
         bool DryRun,
         bool Verbose,

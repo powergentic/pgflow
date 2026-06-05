@@ -87,11 +87,23 @@ public sealed class WorkflowValidator(IEnumerable<IActionRunner>? actionRunners 
 
         foreach (var action in workflow.Actions)
         {
+            var actionIndex = workflow.Actions.FindIndex(candidate => string.Equals(candidate.Id, action.Id, StringComparison.OrdinalIgnoreCase));
+            var nextActionId = actionIndex >= 0 && actionIndex < workflow.Actions.Count - 1
+                ? workflow.Actions[actionIndex + 1].Id
+                : null;
+
             foreach (var transition in action.Next)
             {
                 if (!string.IsNullOrWhiteSpace(transition.Goto) && !actionIds.Contains(transition.Goto))
                 {
                     result.Errors.Add($"Action '{action.Id}' transitions to missing action '{transition.Goto}'.");
+                }
+
+                if (string.IsNullOrWhiteSpace(transition.When)
+                    && !string.IsNullOrWhiteSpace(nextActionId)
+                    && string.Equals(transition.Goto, nextActionId, StringComparison.OrdinalIgnoreCase))
+                {
+                    result.Errors.Add($"Action '{action.Id}' has an unnecessary unconditional goto to the next action '{nextActionId}'.");
                 }
             }
         }

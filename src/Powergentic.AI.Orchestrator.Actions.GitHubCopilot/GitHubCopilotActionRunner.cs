@@ -15,10 +15,11 @@ public sealed class GitHubCopilotActionRunner(ICopilotClientAdapter copilotClien
         var writeResponseTo = context.GetString("writeResponseTo");
         var responsePath = string.IsNullOrWhiteSpace(writeResponseTo)
             ? null
-            : ResolvePath(context.ProjectFolder, writeResponseTo);
-        var workingDirectory = string.IsNullOrWhiteSpace(context.GetString("workingDirectory"))
-            ? context.ProjectFolder
-            : ResolvePath(context.ProjectFolder, context.GetString("workingDirectory")!);
+            : ResolvePath(context.TargetWorkingDirectory, writeResponseTo);
+        var configuredWorkingDirectory = context.GetString("workingDirectory");
+        var workingDirectory = string.IsNullOrWhiteSpace(configuredWorkingDirectory)
+            ? context.TargetWorkingDirectory
+            : ResolvePath(context.TargetWorkingDirectory, configuredWorkingDirectory);
 
         context.Environment.TryGetValue("GITHUB_TOKEN", out var envToken);
 
@@ -33,7 +34,7 @@ public sealed class GitHubCopilotActionRunner(ICopilotClientAdapter copilotClien
             RequestHeaders = context.GetStringMap("requestHeaders"),
         };
 
-        logger.LogInformation("Sending prompt to GitHub Copilot for action {ActionId}", context.Action.Id);
+        logger.LogInformation("Sending prompt to GitHub Copilot for action {ActionId} in {WorkingDirectory}", context.Action.Id, workingDirectory);
         var result = await copilotClient.PromptAsync(request, cancellationToken);
 
         if (!string.IsNullOrWhiteSpace(responsePath))
@@ -56,13 +57,19 @@ public sealed class GitHubCopilotActionRunner(ICopilotClientAdapter copilotClien
             outputs["outputTokens"] = result.OutputTokens.ToString();
         }
 
+        var metadata = new Dictionary<string, object?>(result.Metadata ?? new Dictionary<string, object?>(), StringComparer.OrdinalIgnoreCase)
+        {
+            ["workingDirectory"] = workingDirectory,
+            ["responseFile"] = responsePath,
+        };
+
         return new ActionResult
         {
             ActionId = context.Action.Id,
             Status = ActionExecutionStatus.Succeeded,
             Summary = "GitHub Copilot prompt completed.",
             Outputs = outputs,
-            Metadata = result.Metadata,
+            Metadata = metadata,
             StartedAt = startedAt,
             CompletedAt = DateTimeOffset.UtcNow,
         };

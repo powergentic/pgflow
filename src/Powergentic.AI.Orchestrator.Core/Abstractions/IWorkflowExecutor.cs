@@ -6,6 +6,7 @@ public interface IWorkflowExecutor
 {
     Task<WorkflowRunResult> ExecuteAsync(
         string projectFolder,
+        string targetWorkingDirectory,
         string workflowFilePath,
         IReadOnlyDictionary<string, object?>? variableOverrides = null,
         IReadOnlyDictionary<string, string?>? environmentOverrides = null,

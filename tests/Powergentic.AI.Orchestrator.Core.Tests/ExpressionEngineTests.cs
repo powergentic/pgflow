@@ -30,9 +30,9 @@ public class ExpressionEngineTests
         context.CurrentActionId = "review";
 
         var engine = new ExpressionEngine();
-        var result = engine.InterpolateString("${ runtime.projectFolder }/${ runtime.currentActionId }/${ runtime.runId }", context);
+        var result = engine.InterpolateString("${ runtime.projectFolder }/${ runtime.targetWorkingDirectory }/${ runtime.currentActionId }/${ runtime.runId }", context);
 
-        Assert.Equal("/tmp/project/review/run-1", result);
+        Assert.Equal("/tmp/project//tmp/target/review/run-1", result);
     }
 
     [Fact]
@@ -92,6 +92,7 @@ public class ExpressionEngineTests
         {
             Workflow = new WorkflowDefinition { Name = "demo" },
             ProjectFolder = "/tmp/project",
+            TargetWorkingDirectory = "/tmp/target",
             WorkflowFilePath = "/tmp/project/orchestrator.yml",
             RunId = "run-1",
             LogFolder = "/tmp/project/logs/run-1",
