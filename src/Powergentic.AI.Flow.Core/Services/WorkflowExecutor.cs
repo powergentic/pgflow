@@ -80,6 +80,7 @@ public sealed class WorkflowExecutor(
             Environment = environment,
             StartedAt = startedAt,
         };
+        var publishedEntries = new List<WorkflowPublishedEntry>();
 
         await logWriter.WriteResolvedWorkflowAsync(paths, workflow, cancellationToken);
 
@@ -156,6 +157,10 @@ public sealed class WorkflowExecutor(
                 }
             }
 
+            var actionPublishedEntries = CreatePublishedEntries(action, context);
+            publishedEntries.AddRange(actionPublishedEntries);
+            WritePublishedConsoleEntries(actionPublishedEntries);
+
             var actionLogPath = Path.Combine(paths.ActionsFolder, $"{workflow.Actions.FindIndex(a => a.Id == action.Id) + 1:00}-{action.Id}.json");
             await logWriter.WriteActionLogAsync(new ActionLogData
             {
@@ -185,6 +190,7 @@ public sealed class WorkflowExecutor(
             StartedAt = context.StartedAt,
             CompletedAt = context.CompletedAt.Value,
             TransitionCount = context.TransitionCount,
+            PublishedEntries = publishedEntries,
             ActionResults = context.ActionResults.Values.OrderBy(r => workflow.Actions.FindIndex(a => a.Id == r.ActionId)).ToList(),
             Succeeded = context.ActionResults.Values.All(r => r.Status != ActionExecutionStatus.Failed),
         };
@@ -216,6 +222,50 @@ public sealed class WorkflowExecutor(
         foreach (var pair in variableOverrides)
         {
             workflow.Variables[pair.Key] = pair.Value;
+        }
+    }
+
+    private List<WorkflowPublishedEntry> CreatePublishedEntries(WorkflowActionDefinition action, ExecutionContextModel context)
+    {
+        var entries = new List<WorkflowPublishedEntry>();
+
+        foreach (var publish in action.Publish)
+        {
+            if (!expressions.EvaluateCondition(publish.If, context))
+            {
+                continue;
+            }
+
+            var content = expressions.InterpolateString(publish.From, context);
+            if (string.IsNullOrWhiteSpace(content))
+            {
+                continue;
+            }
+
+            if (publish.MaxLength is > 0 && content.Length > publish.MaxLength.Value)
+            {
+                content = content[..publish.MaxLength.Value];
+            }
+
+            entries.Add(new WorkflowPublishedEntry
+            {
+                ActionId = action.Id,
+                Title = string.IsNullOrWhiteSpace(publish.Title) ? action.Name ?? action.Id : publish.Title,
+                Content = content,
+                To = publish.To.ToArray(),
+            });
+        }
+
+        return entries;
+    }
+
+    private static void WritePublishedConsoleEntries(IEnumerable<WorkflowPublishedEntry> entries)
+    {
+        foreach (var entry in entries.Where(entry => entry.To.Contains("console", StringComparer.OrdinalIgnoreCase)))
+        {
+            Console.WriteLine($"===== {entry.Title} =====");
+            Console.WriteLine(entry.Content);
+            Console.WriteLine();
         }
     }
 

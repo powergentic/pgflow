@@ -11,5 +11,6 @@ public sealed class WorkflowRunResult
     public DateTimeOffset StartedAt { get; init; }
     public DateTimeOffset CompletedAt { get; init; }
     public int TransitionCount { get; init; }
+    public IReadOnlyList<WorkflowPublishedEntry> PublishedEntries { get; init; } = [];
     public required IReadOnlyList<ActionResult> ActionResults { get; init; }
 }

@@ -88,12 +88,9 @@ actions:
       writeResponseTo: ${ runtime.logFolder }/final-analysis.md
     outputs:
       analysisFile: ${ actions.analyze.outputs.responseFile }
-
-  - id: publishAnalysis
-    name: Print final analysis
-    uses: script
-    with:
-      shell: bash
-      path: scripts/publish-analysis.sh
-      environment:
-        ANALYSIS_FILE: ${ actions.analyze.outputs.responseFile }
+    publish:
+      - title: Final analysis
+        from: ${ actions.analyze.outputs.response }
+        to:
+          - console
+          - runSummary

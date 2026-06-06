@@ -6,6 +6,7 @@ namespace Powergentic.AI.Flow.Core.Services;
 public sealed class WorkflowValidator(IEnumerable<IActionRunner>? actionRunners = null) : IWorkflowValidator
 {
     private static readonly HashSet<string> SupportedShells = new(["bash", "pwsh"], StringComparer.OrdinalIgnoreCase);
+    private static readonly HashSet<string> SupportedPublishTargets = new(["console", "runSummary"], StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> registeredActionTypes = actionRunners?
         .Select(r => r.ActionType)
         .Where(actionType => !string.IsNullOrWhiteSpace(actionType))
@@ -113,6 +114,8 @@ public sealed class WorkflowValidator(IEnumerable<IActionRunner>? actionRunners 
 
     private static void ValidateActionConfiguration(WorkflowActionDefinition action, string? projectFolder, WorkflowValidationResult result)
     {
+        ValidatePublishConfiguration(action, result);
+
         if (string.Equals(action.Uses, "script", StringComparison.OrdinalIgnoreCase))
         {
             ValidateScriptAction(action, projectFolder, result);
@@ -159,6 +162,38 @@ public sealed class WorkflowValidator(IEnumerable<IActionRunner>? actionRunners 
         }
 
         ValidateReferencedFile(action.Id, "with.promptFile", promptFile, projectFolder, result);
+    }
+
+    private static void ValidatePublishConfiguration(WorkflowActionDefinition action, WorkflowValidationResult result)
+    {
+        for (var index = 0; index < action.Publish.Count; index++)
+        {
+            var publish = action.Publish[index];
+            if (string.IsNullOrWhiteSpace(publish.From))
+            {
+                result.Errors.Add($"Action '{action.Id}' publish[{index}] must specify from.");
+            }
+
+            if (publish.To.Count == 0)
+            {
+                result.Errors.Add($"Action '{action.Id}' publish[{index}] must specify at least one target in to.");
+            }
+            else
+            {
+                foreach (var target in publish.To)
+                {
+                    if (!SupportedPublishTargets.Contains(target))
+                    {
+                        result.Errors.Add($"Action '{action.Id}' publish[{index}] has unsupported target '{target}'. Expected one of: console, runSummary.");
+                    }
+                }
+            }
+
+            if (publish.MaxLength is <= 0)
+            {
+                result.Errors.Add($"Action '{action.Id}' publish[{index}] maxLength must be greater than zero when specified.");
+            }
+        }
     }
 
     private static void ValidateReferencedFile(string actionId, string fieldName, string? filePath, string? projectFolder, WorkflowValidationResult result)

@@ -238,6 +238,42 @@ public class WorkflowValidatorTests
         Assert.Contains(result.Errors, error => error.Contains("unnecessary unconditional goto", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public void Validate_FailsForPublishEntryWithoutFrom()
+    {
+        var workflow = new WorkflowDefinition
+        {
+            Name = "demo",
+            Actions =
+            [
+                new WorkflowActionDefinition
+                {
+                    Id = "review",
+                    Uses = "githubCopilot",
+                    With = new Dictionary<string, object?>
+                    {
+                        ["prompt"] = "Review the project"
+                    },
+                    Publish =
+                    [
+                        new WorkflowActionPublishDefinition
+                        {
+                            Title = "Missing source",
+                            To = ["runSummary"]
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var validator = new WorkflowValidator();
+        var result = validator.Validate(workflow);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(result.Errors, error => error.Contains("publish", StringComparison.OrdinalIgnoreCase)
+            && error.Contains("from", StringComparison.OrdinalIgnoreCase));
+    }
+
     private static string CreateTempProjectFolder()
     {
         var projectFolder = Path.Combine(Path.GetTempPath(), $"orchestrator-validator-{Guid.NewGuid():N}");

@@ -294,6 +294,77 @@ public class WorkflowExecutorTests
         }
     }
 
+    [Fact]
+    public async Task ExecuteAsync_PublishesConfiguredActionOutputsToRunSummary()
+    {
+        var projectFolder = CreateProjectFolder();
+        var workflowFilePath = Path.Combine(projectFolder, "flow.yml");
+        await File.WriteAllTextAsync(workflowFilePath, "name: placeholder");
+
+        var workflow = new WorkflowDefinition
+        {
+            Name = "demo",
+            Actions =
+            [
+                new WorkflowActionDefinition
+                {
+                    Id = "analyze",
+                    Uses = "script",
+                    With = new Dictionary<string, object?>
+                    {
+                        ["shell"] = "bash",
+                        ["run"] = "echo analyze"
+                    },
+                    Publish =
+                    [
+                        new WorkflowActionPublishDefinition
+                        {
+                            Title = "Final analysis",
+                            From = "${ actions.analyze.outputs.response }",
+                            To = ["runSummary"]
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var executor = CreateExecutor(workflow,
+        [
+            new TestActionRunner("script", (context, _) => Task.FromResult(new ActionResult
+            {
+                ActionId = context.Action.Id,
+                Status = ActionExecutionStatus.Succeeded,
+                Outputs = new Dictionary<string, string?>
+                {
+                    ["response"] = "Ship the TODO app with the new Bootstrap form flow."
+                },
+                StartedAt = DateTimeOffset.UtcNow,
+                CompletedAt = DateTimeOffset.UtcNow,
+            }))
+        ]);
+
+        try
+        {
+            var result = await executor.ExecuteAsync(projectFolder, projectFolder, workflowFilePath);
+
+            var publishedEntry = Assert.Single(result.PublishedEntries);
+            Assert.Equal("analyze", publishedEntry.ActionId);
+            Assert.Equal("Final analysis", publishedEntry.Title);
+            Assert.Equal("Ship the TODO app with the new Bootstrap form flow.", publishedEntry.Content);
+            Assert.Contains("runSummary", publishedEntry.To, StringComparer.OrdinalIgnoreCase);
+
+            var runSummaryPath = Path.Combine(result.LogFolder, "run.json");
+            var runSummaryJson = await File.ReadAllTextAsync(runSummaryPath);
+            Assert.Contains("publishedEntries", runSummaryJson, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Final analysis", runSummaryJson, StringComparison.Ordinal);
+            Assert.Contains("Bootstrap form flow", runSummaryJson, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(projectFolder, recursive: true);
+        }
+    }
+
     private static WorkflowExecutor CreateExecutor(WorkflowDefinition workflow, IEnumerable<IActionRunner> actionRunners)
         => new(
             new FakeWorkflowLoader(workflow),

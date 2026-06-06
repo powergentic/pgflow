@@ -670,6 +670,14 @@ actions:
   "startedAt": "2026-06-06T00:00:00+00:00",
   "completedAt": "2026-06-06T00:00:05+00:00",
   "transitionCount": 2,
+  "publishedEntries": [
+    {
+      "actionId": "review",
+      "title": "Final analysis",
+      "content": "A concise summary for operators.",
+      "to": ["runSummary"]
+    }
+  ],
   "actionResults": [
     {
       "actionId": "hello",
@@ -695,6 +703,9 @@ actions:
             Assert.Equal(0, exitCode);
             Assert.Contains("Run ID:", stdout, StringComparison.Ordinal);
             Assert.Contains("Readable Workflow", stdout, StringComparison.Ordinal);
+            Assert.Contains("Published:", stdout, StringComparison.Ordinal);
+            Assert.Contains("Final analysis", stdout, StringComparison.Ordinal);
+            Assert.Contains("A concise summary for operators.", stdout, StringComparison.Ordinal);
             Assert.Contains("- hello:", stdout, StringComparison.Ordinal);
             Assert.Equal(string.Empty, stderr);
         }

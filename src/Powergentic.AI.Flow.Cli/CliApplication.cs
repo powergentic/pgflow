@@ -294,6 +294,17 @@ public static class CliApplication
             Console.WriteLine($"Duration:     {(run.CompletedAt - run.StartedAt).TotalSeconds:F2}s");
             Console.WriteLine($"Transitions:  {run.TransitionCount}");
             Console.WriteLine($"Logs:         {run.LogFolder}");
+
+            if (run.PublishedEntries.Count > 0)
+            {
+                Console.WriteLine("Published:");
+                foreach (var entry in run.PublishedEntries)
+                {
+                    Console.WriteLine($"- {entry.Title} ({string.Join(", ", entry.To)}):");
+                    Console.WriteLine(entry.Content);
+                }
+            }
+
             Console.WriteLine("Actions:");
 
             foreach (var action in run.ActionResults)
