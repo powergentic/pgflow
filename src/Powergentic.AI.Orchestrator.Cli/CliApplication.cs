@@ -37,7 +37,7 @@ public static class CliApplication
         }
         catch (CliUsageException ex)
         {
-            return WriteError(false, ex.Message);
+            return WriteError(args.Contains("--json", StringComparer.OrdinalIgnoreCase), ex.Message);
         }
         catch (Exception ex)
         {
@@ -69,6 +69,7 @@ public static class CliApplication
                 projectFolder,
                 targetWorkingDirectory,
                 workflowFile,
+                command.InputOverrides,
                 command.VariableOverrides,
                 command.EnvironmentOverrides,
                 cancellationToken);
@@ -125,6 +126,7 @@ public static class CliApplication
         try
         {
             var workflow = await loader.LoadAsync(workflowFile, cancellationToken);
+            ApplyInputOverrides(workflow, command.InputOverrides);
             ApplyVariableOverrides(workflow, command.VariableOverrides);
             ApplyEnvironmentOverrides(workflow, command.EnvironmentOverrides);
             var validation = validator.Validate(workflow, projectFolder);
@@ -361,6 +363,7 @@ public static class CliApplication
         var json = false;
         var force = false;
         var template = "basic-script";
+        var inputOverrides = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
         var variableOverrides = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
         var environmentOverrides = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
 
@@ -386,6 +389,12 @@ public static class CliApplication
                     break;
                 case var value when value.StartsWith("--workdir=", StringComparison.Ordinal):
                     targetWorkingDirectory = value["--workdir=".Length..];
+                    break;
+                case "--input":
+                    AddOverride(inputOverrides, ReadRequiredValue(args, ref i, arg));
+                    break;
+                case var value when value.StartsWith("--input=", StringComparison.Ordinal):
+                    AddOverride(inputOverrides, value["--input=".Length..]);
                     break;
                 case "--var":
                     AddOverride(variableOverrides, ReadRequiredValue(args, ref i, arg));
@@ -448,7 +457,7 @@ public static class CliApplication
             workflowFile = positionals[1];
         }
 
-        return new ParsedCommand(commandName, projectFolder, targetWorkingDirectory, workflowFile, dryRun, verbose, json, force, template, runId, variableOverrides, environmentOverrides);
+        return new ParsedCommand(commandName, projectFolder, targetWorkingDirectory, workflowFile, dryRun, verbose, json, force, template, runId, inputOverrides, variableOverrides, environmentOverrides);
     }
 
     private static string ReadRequiredValue(string[] args, ref int index, string optionName)
@@ -530,6 +539,7 @@ public static class CliApplication
             "basic-script",
             null,
             new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase),
+            new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase));
 
     private static ParsedCommand CreateVersionCommand()
@@ -544,6 +554,7 @@ public static class CliApplication
             false,
             "basic-script",
             null,
+            new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase));
 
@@ -574,6 +585,14 @@ public static class CliApplication
         if (!File.Exists(workflowFile))
         {
             throw new CliUsageException($"Workflow file does not exist: {workflowFile}");
+        }
+    }
+
+    private static void ApplyInputOverrides(WorkflowDefinition workflow, IReadOnlyDictionary<string, object?> inputOverrides)
+    {
+        foreach (var pair in inputOverrides)
+        {
+            workflow.Inputs[pair.Key] = pair.Value;
         }
     }
 
@@ -716,6 +735,7 @@ Options:
   -h, --help                    Show help information.
   --workflow <file>             Override the default workflow file name.
   --workdir <path>              Override the target working directory for run.
+  --input key=value             Override a workflow input.
   --var key=value               Override a workflow variable.
   --env key=value               Inject or override an environment value.
   --dry-run                     Validate without executing actions.
@@ -747,6 +767,7 @@ Examples:
         bool Force,
         string Template,
         string? RunId,
+        IReadOnlyDictionary<string, object?> InputOverrides,
         IReadOnlyDictionary<string, object?> VariableOverrides,
         IReadOnlyDictionary<string, string?> EnvironmentOverrides);
 

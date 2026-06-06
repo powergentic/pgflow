@@ -7,7 +7,7 @@ namespace Powergentic.AI.Orchestrator.Core.Tests;
 public class ExpressionEngineTests
 {
     [Fact]
-    public void InterpolateString_ResolvesVariablesAndActionOutputs()
+    public void InterpolateString_ResolvesInputsVariablesAndActionOutputs()
     {
         var context = CreateContext();
         context.ActionResults["prepare"] = new ActionResult
@@ -18,9 +18,9 @@ public class ExpressionEngineTests
         };
 
         var engine = new ExpressionEngine();
-        var result = engine.InterpolateString("${ variables.name }/${ actions.prepare.outputs.file }", context);
+        var result = engine.InterpolateString("${ inputs.mode }/${ variables.name }/${ actions.prepare.outputs.file }", context);
 
-        Assert.Equal("demo/output.txt", result);
+        Assert.Equal("cli/demo/output.txt", result);
     }
 
     [Fact]
@@ -96,6 +96,7 @@ public class ExpressionEngineTests
             WorkflowFilePath = "/tmp/project/orchestrator.yml",
             RunId = "run-1",
             LogFolder = "/tmp/project/logs/run-1",
+            Inputs = new Dictionary<string, object?> { ["mode"] = "cli" },
             Variables = new Dictionary<string, object?> { ["name"] = "demo" },
             Environment = new Dictionary<string, string?>(),
             StartedAt = DateTimeOffset.UtcNow,

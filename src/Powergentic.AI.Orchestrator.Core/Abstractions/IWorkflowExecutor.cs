@@ -8,6 +8,7 @@ public interface IWorkflowExecutor
         string projectFolder,
         string targetWorkingDirectory,
         string workflowFilePath,
+        IReadOnlyDictionary<string, object?>? inputOverrides = null,
         IReadOnlyDictionary<string, object?>? variableOverrides = null,
         IReadOnlyDictionary<string, string?>? environmentOverrides = null,
         CancellationToken cancellationToken = default);

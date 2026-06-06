@@ -216,7 +216,7 @@ public class WorkflowExecutorTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_AppliesVariableAndEnvironmentOverrides()
+    public async Task ExecuteAsync_AppliesInputVariableAndEnvironmentOverrides()
     {
         var projectFolder = CreateProjectFolder();
         var workflowFilePath = Path.Combine(projectFolder, "orchestrator.yml");
@@ -225,13 +225,17 @@ public class WorkflowExecutorTests
         var workflow = new WorkflowDefinition
         {
             Name = "demo",
+            Inputs = new Dictionary<string, object?>
+            {
+                ["mode"] = "default"
+            },
             Variables = new Dictionary<string, object?>
             {
                 ["message"] = "original"
             },
             Env = new Dictionary<string, string?>
             {
-                ["MODE"] = "${ variables.message }"
+                ["MODE"] = "${ inputs.mode }-${ variables.message }"
             },
             Actions =
             [
@@ -242,7 +246,8 @@ public class WorkflowExecutorTests
                     With = new Dictionary<string, object?>
                     {
                         ["shell"] = "bash",
-                        ["run"] = "echo first"
+                        ["run"] = "echo first",
+                        ["summary"] = "${ inputs.mode }/${ variables.message }"
                     }
                 }
             ]
@@ -270,15 +275,18 @@ public class WorkflowExecutorTests
                 projectFolder,
                 projectFolder,
                 workflowFilePath,
+                new Dictionary<string, object?> { ["mode"] = "cli" },
                 new Dictionary<string, object?> { ["message"] = "overridden" },
                 new Dictionary<string, string?> { ["EXTERNAL_FLAG"] = "enabled" });
 
             Assert.True(result.Succeeded);
             Assert.NotNull(capturedContext);
             Assert.Equal(projectFolder, capturedContext!.ExecutionContext.TargetWorkingDirectory);
+            Assert.Equal("cli", capturedContext.ExecutionContext.Inputs["mode"]);
             Assert.Equal("overridden", capturedContext.ExecutionContext.Variables["message"]);
-            Assert.Equal("overridden", capturedContext.ExecutionContext.Environment["MODE"]);
+            Assert.Equal("cli-overridden", capturedContext.ExecutionContext.Environment["MODE"]);
             Assert.Equal("enabled", capturedContext.ExecutionContext.Environment["EXTERNAL_FLAG"]);
+            Assert.Equal("cli/overridden", capturedContext.ResolvedInputs["summary"]);
         }
         finally
         {

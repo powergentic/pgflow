@@ -613,6 +613,12 @@ Use both:
 - human-readable console logging
 - structured JSON logs for machine analysis
 
+### Current gap noted by the new dev-loop sample
+
+The sample workflow now emits a final GitHub Copilot analysis to both the run logs and the console. Writing the response to the run log folder is supported today through `writeResponseTo`, but echoing that Copilot-authored file back to the console currently requires a follow-up `script` action that reads the file and prints it.
+
+That workaround is acceptable for MVP. A later enhancement could add first-class support for mirroring selected Copilot responses directly into pgflow console output and/or run summaries.
+
 ---
 
 ## 15. Validation Strategy
@@ -670,11 +676,22 @@ pgflow logs <project-folder> [--latest]
 
 - `--workflow <file>` override default workflow filename
 - `--workdir <path>` override the target working directory for `run`
+- `--input key=value` override workflow inputs
 - `--var key=value` override workflow variables
 - `--env key=value` inject/override env values for a run
 - `--dry-run` resolve and validate without executing actions
 - `--verbose`
 - `--json`
+
+### Practical note for prompt-driven workflows
+
+The CLI now supports caller-provided workflow inputs through top-level `inputs` plus `--input`. A workflow can define an input such as `userPrompt` and callers can pass the prompt text at runtime with:
+
+```text
+pgflow run <project-folder> <target-working-directory> --input userPrompt="Build a TODO app with ..."
+```
+
+Existing `variables` and `--var` remain supported for workflow-controlled state and defaults.
 
 ### Command behavior
 
@@ -905,6 +922,7 @@ These choices reduce complexity while preserving a strong foundation.
 8. What should the default loop safeguards be for `maxTransitions` and `maxVisitsPerAction`?
 9. Should skipped actions count toward loop/transition totals?
 10. Should action output files such as `writeResponseTo` resolve relative to the target working directory, the pgflow project folder, or be configurable per field?
+11. Should pgflow gain a first-class way to surface selected GitHub Copilot responses directly in console output without requiring a follow-up script action?
 
 ---
 

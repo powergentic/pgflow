@@ -8,6 +8,7 @@ public sealed class ExecutionContext
     public required string WorkflowFilePath { get; init; }
     public required string RunId { get; init; }
     public required string LogFolder { get; init; }
+    public required Dictionary<string, object?> Inputs { get; init; }
     public required Dictionary<string, object?> Variables { get; init; }
     public required Dictionary<string, string?> Environment { get; init; }
     public Dictionary<string, ActionResult> ActionResults { get; } = new(StringComparer.OrdinalIgnoreCase);

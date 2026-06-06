@@ -172,7 +172,7 @@ actions:
     }
 
     [Fact]
-    public async Task RunAsync_ValidateCommandAppliesVarAndEnvOverrides()
+    public async Task RunAsync_ValidateCommandAppliesInputVarAndEnvOverrides()
     {
         var projectFolder = CreateProjectFolder();
         try
@@ -180,10 +180,12 @@ actions:
             await File.WriteAllTextAsync(Path.Combine(projectFolder, "orchestrator.yml"), """
 name: Override Demo
 version: 1
+inputs:
+  mode: default
 variables:
   enabled: false
 env:
-  MODE: disabled
+  MODE: ${ inputs.mode }
 actions:
   - id: hello
     uses: script
@@ -196,6 +198,7 @@ actions:
             var (exitCode, stdout, stderr) = await InvokeAsync([
                 "validate",
                 projectFolder,
+                "--input", "mode=cli",
                 "--var", "enabled=true",
                 "--env", "MODE=enabled"]);
 
@@ -211,22 +214,30 @@ actions:
 
     private static async Task<(int ExitCode, string StdOut, string StdErr)> InvokeAsync(string[] args)
     {
-        var originalOut = Console.Out;
-        var originalError = Console.Error;
-        using var stdout = new StringWriter(new StringBuilder());
-        using var stderr = new StringWriter(new StringBuilder());
-        Console.SetOut(stdout);
-        Console.SetError(stderr);
-
+        await ConsoleTestSynchronization.Gate.WaitAsync();
         try
         {
-            var exitCode = await CliApplication.RunAsync(args);
-            return (exitCode, stdout.ToString(), stderr.ToString());
+            var originalOut = Console.Out;
+            var originalError = Console.Error;
+            using var stdout = new StringWriter(new StringBuilder());
+            using var stderr = new StringWriter(new StringBuilder());
+            Console.SetOut(stdout);
+            Console.SetError(stderr);
+
+            try
+            {
+                var exitCode = await CliApplication.RunAsync(args);
+                return (exitCode, stdout.ToString(), stderr.ToString());
+            }
+            finally
+            {
+                Console.SetOut(originalOut);
+                Console.SetError(originalError);
+            }
         }
         finally
         {
-            Console.SetOut(originalOut);
-            Console.SetError(originalError);
+            ConsoleTestSynchronization.Gate.Release();
         }
     }
 

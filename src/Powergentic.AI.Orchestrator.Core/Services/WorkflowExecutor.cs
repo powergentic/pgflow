@@ -17,11 +17,13 @@ public sealed class WorkflowExecutor(
         string projectFolder,
         string targetWorkingDirectory,
         string workflowFilePath,
+        IReadOnlyDictionary<string, object?>? inputOverrides = null,
         IReadOnlyDictionary<string, object?>? variableOverrides = null,
         IReadOnlyDictionary<string, string?>? environmentOverrides = null,
         CancellationToken cancellationToken = default)
     {
         var workflow = await loader.LoadAsync(workflowFilePath, cancellationToken);
+        ApplyInputOverrides(workflow, inputOverrides);
         ApplyVariableOverrides(workflow, variableOverrides);
 
         var validation = validator.Validate(workflow, projectFolder);
@@ -44,6 +46,7 @@ public sealed class WorkflowExecutor(
             }
         }
 
+        var inputs = new Dictionary<string, object?>(workflow.Inputs, StringComparer.OrdinalIgnoreCase);
         var variables = new Dictionary<string, object?>(workflow.Variables, StringComparer.OrdinalIgnoreCase);
         var startedAt = DateTimeOffset.UtcNow;
 
@@ -57,6 +60,7 @@ public sealed class WorkflowExecutor(
                 WorkflowFilePath = workflowFilePath,
                 RunId = runId,
                 LogFolder = paths.RunFolder,
+                Inputs = inputs,
                 Variables = variables,
                 Environment = environment,
                 StartedAt = startedAt,
@@ -71,6 +75,7 @@ public sealed class WorkflowExecutor(
             WorkflowFilePath = workflowFilePath,
             RunId = runId,
             LogFolder = paths.RunFolder,
+            Inputs = inputs,
             Variables = variables,
             Environment = environment,
             StartedAt = startedAt,
@@ -186,6 +191,19 @@ public sealed class WorkflowExecutor(
 
         await logWriter.WriteRunSummaryAsync(runResult, Path.Combine(paths.RunFolder, "run.json"), cancellationToken);
         return runResult;
+    }
+
+    private static void ApplyInputOverrides(WorkflowDefinition workflow, IReadOnlyDictionary<string, object?>? inputOverrides)
+    {
+        if (inputOverrides is null)
+        {
+            return;
+        }
+
+        foreach (var pair in inputOverrides)
+        {
+            workflow.Inputs[pair.Key] = pair.Value;
+        }
     }
 
     private static void ApplyVariableOverrides(WorkflowDefinition workflow, IReadOnlyDictionary<string, object?>? variableOverrides)

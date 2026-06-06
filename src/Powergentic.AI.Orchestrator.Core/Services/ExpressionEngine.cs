@@ -138,6 +138,11 @@ public sealed class ExpressionEngine
     private object? ResolvePath(string path, ExecutionContextModel context)
     {
         var trimmed = path.Trim();
+        if (trimmed.StartsWith("inputs.", StringComparison.OrdinalIgnoreCase))
+        {
+            return ResolveDictionaryPath(context.Inputs, trimmed[7..]);
+        }
+
         if (trimmed.StartsWith("variables.", StringComparison.OrdinalIgnoreCase))
         {
             return ResolveDictionaryPath(context.Variables, trimmed[10..]);

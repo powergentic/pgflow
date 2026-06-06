@@ -1,36 +1,99 @@
-name: Script And Copilot Loop
+name: ASP.NET MVC And Bootstrap TODO Dev Loop
 version: 1
 variables:
-  needsReview: true
+  # Override this at runtime, for example:
+  # pgflow run samples/script-and-copilot-loop <target-working-directory> --var userPrompt="Build a TODO app for a small team"
+  userPrompt: Build an ASP.NET Core MVC TODO list application that uses Bootstrap CSS and a traditional HTTP GET/POST request model.
+  minimumCoverage: 90
 execution:
   startAt: prepare
-  maxTransitions: 10
-  maxVisitsPerAction: 4
+  maxTransitions: 30
+  maxVisitsPerAction: 10
 actions:
   - id: prepare
+    name: Inspect target workspace
     uses: script
     with:
       shell: bash
       path: scripts/prepare.sh
 
-  - id: review
-    if: ${{ success() && variables.needsReview == true }}
+  - id: implement
+    name: Implement from user prompt
     uses: githubCopilot
     with:
-      promptFile: prompts/review.prompt.md
+      promptFile: prompts/build-app.prompt.md
       inputs:
-        statusFile: ${ actions.prepare.outputs.statusFile }
         targetPath: ${ runtime.targetWorkingDirectory }
-      writeResponseTo: output/review.txt
+        userPrompt: ${ variables.userPrompt }
+        minimumCoverage: ${ variables.minimumCoverage }
+        workspaceStatusFile: ${ actions.prepare.outputs.workspaceStatusFile }
+        workspaceSummary: ${ actions.prepare.outputs.workspaceSummary }
+        appExists: ${ actions.prepare.outputs.appExists }
+        buildReportFile: ${ actions.build.outputs.buildReportFile }
+        testReportFile: ${ actions.test.outputs.testReportFile }
+        coverageReportFile: ${ actions.coverage.outputs.coverageReportFile }
+      writeResponseTo: ${ runtime.logFolder }/copilot-implementation.md
     outputs:
-      responseFile: ${ actions.review.outputs.responseFile }
-    next:
-      - when: ${{ actions.review.outputs.responseFile == null }}
-        goto: prepare
+      buildResponseFile: ${ actions.implement.outputs.responseFile }
 
-  - id: done
-    if: ${{ always() }}
+  - id: build
+    name: Run dotnet build
     uses: script
     with:
       shell: bash
-      run: echo "done=true" >> "$ORCHESTRATOR_OUTPUT"
+      path: scripts/run-build.sh
+      failOnNonZeroExit: false
+    next:
+      - when: ${{ actions.build.outputs.buildSucceeded != 'true' }}
+        goto: implement
+
+  - id: test
+    name: Run dotnet test
+    uses: script
+    with:
+      shell: bash
+      path: scripts/run-tests.sh
+      failOnNonZeroExit: false
+    next:
+      - when: ${{ actions.test.outputs.testSucceeded != 'true' }}
+        goto: implement
+
+  - id: coverage
+    name: Verify test coverage
+    uses: script
+    with:
+      shell: bash
+      path: scripts/check-coverage.sh
+      failOnNonZeroExit: false
+      environment:
+        MINIMUM_COVERAGE: ${ variables.minimumCoverage }
+    next:
+      - when: ${{ actions.coverage.outputs.coveragePassed != 'true' }}
+        goto: implement
+
+  - id: analyze
+    name: Analyze final project state
+    uses: githubCopilot
+    with:
+      promptFile: prompts/final-analysis.prompt.md
+      inputs:
+        targetPath: ${ runtime.targetWorkingDirectory }
+        userPrompt: ${ variables.userPrompt }
+        workspaceStatusFile: ${ actions.prepare.outputs.workspaceStatusFile }
+        buildResponseFile: ${ actions.implement.outputs.responseFile }
+        buildReportFile: ${ actions.build.outputs.buildReportFile }
+        testReportFile: ${ actions.test.outputs.testReportFile }
+        coverageReportFile: ${ actions.coverage.outputs.coverageReportFile }
+        coveragePercent: ${ actions.coverage.outputs.coveragePercent }
+      writeResponseTo: ${ runtime.logFolder }/final-analysis.md
+    outputs:
+      analysisFile: ${ actions.analyze.outputs.responseFile }
+
+  - id: publishAnalysis
+    name: Print final analysis
+    uses: script
+    with:
+      shell: bash
+      path: scripts/publish-analysis.sh
+      environment:
+        ANALYSIS_FILE: ${ actions.analyze.outputs.responseFile }

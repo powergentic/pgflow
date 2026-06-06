@@ -1,6 +1,6 @@
-# Powergentic AI Workflow Orchestrator CLI
+# Powergentic Flow
 
-`pgflow` is a local workflow orchestrator for running scripted steps and GitHub Copilot-driven steps from a dedicated pgflow project folder against a separate target working directory.
+`pgflow` is an AI harness and orchestrator for running workflows built using deterministic scripts and AI prompts within a `pgflow` project folder taking actions within a target working directory.
 
 ![pgflow screenshot](docs/images/pgflow-screenshot.png)
 
@@ -62,6 +62,7 @@ Defaults:
 - `-h`, `--help` - show help information
 - `--workflow <file>` - override the default workflow file name
 - `--workdir <path>` - override the target working directory for `run`
+- `--input key=value` - override a workflow input
 - `--var key=value` - override a workflow variable
 - `--env key=value` - inject or override an environment value
 - `--dry-run` - validate without executing actions
@@ -98,10 +99,10 @@ Run the same workflow with an explicit option instead:
 pgflow run samples/script-and-copilot-loop --workdir ../my-project
 ```
 
-Run with variable and environment overrides:
+Run with input, variable, and environment overrides:
 
 ```bash
-pgflow run samples/basic-script --var greeting=Hello --env NAME=Chris
+pgflow run samples/basic-script --input audience=Developers --var greeting=Hello --env NAME=Chris
 ```
 
 ## Project folder versus target working directory
@@ -130,6 +131,7 @@ Top-level fields:
 - `name`
 - `description`
 - `version`
+- `inputs`
 - `variables`
 - `env`
 - `execution`
@@ -216,11 +218,15 @@ Prompt placeholders support both `{{name}}` and `${name}` forms.
 ## Runtime expressions
 
 Useful runtime values include:
-
+inputs.name }`
+- `${ variables.name }`
 - `${ runtime.projectFolder }`
 - `${ runtime.targetWorkingDirectory }`
 - `${ runtime.runId }`
 - `${ runtime.logFolder }`
+- `${ runtime.currentActionId }`
+
+Workflow-level `inputs` are intended for caller-provided values, typically passed with `--input key=value`. Existing `variables` remain available for workflow-owned state and defaults.
 - `${ runtime.currentActionId }`
 
 ## Logs

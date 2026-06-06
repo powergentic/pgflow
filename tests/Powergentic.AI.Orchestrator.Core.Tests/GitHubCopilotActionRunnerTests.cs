@@ -142,6 +142,7 @@ public class GitHubCopilotActionRunnerTests
             WorkflowFilePath = Path.Combine(projectFolder, "orchestrator.yml"),
             RunId = "run-1",
             LogFolder = Path.Combine(projectFolder, "logs", "run-1"),
+            Inputs = new Dictionary<string, object?>(),
             Variables = new Dictionary<string, object?>(),
             Environment = new Dictionary<string, string?>(),
             StartedAt = DateTimeOffset.UtcNow,

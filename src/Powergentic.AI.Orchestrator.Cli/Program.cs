@@ -1,3 +1,7 @@
-﻿using Powergentic.AI.Orchestrator.Cli;
+﻿namespace Powergentic.AI.Orchestrator.Cli;
 
-return await CliApplication.RunAsync(args);
+public static class Program
+{
+    public static Task<int> Main(string[] args)
+        => CliApplication.RunAsync(args);
+}
