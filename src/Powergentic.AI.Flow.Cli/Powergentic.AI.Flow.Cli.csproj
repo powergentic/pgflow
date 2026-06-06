@@ -1,0 +1,23 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Powergentic.AI.Flow.Core\Powergentic.AI.Flow.Core.csproj" />
+    <ProjectReference Include="..\Powergentic.AI.Flow.Actions.Script\Powergentic.AI.Flow.Actions.Script.csproj" />
+    <ProjectReference Include="..\Powergentic.AI.Flow.Actions.GitHubCopilot\Powergentic.AI.Flow.Actions.GitHubCopilot.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>pgflow</AssemblyName>
+    <Version>1.0.0</Version>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.2" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.2" />
+  </ItemGroup>
+
+</Project>

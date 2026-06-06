@@ -1,4 +1,4 @@
-# AI Orchestrator CLI - Design Plan
+# AI Flow CLI - Design Plan
 
 ## 1. Goal
 
@@ -11,10 +11,10 @@ A pgflow project folder will contain:
 - optional templates, prompts, scripts, and assets
 - a `logs/` folder created automatically for execution history
 
-The orchestrator should:
+The flow runtime should:
 
 - load a workflow from a pgflow project folder
-- treat that folder as the home for `orchestrator.yml`, prompts, scripts, and other workflow assets
+- treat that folder as the home for `flow.yml`, prompts, scripts, and other workflow assets
 - resolve variables, inputs, outputs, and environment variables
 - execute actions in order against a target working directory supplied at runtime
 - support initial action types:
@@ -61,7 +61,7 @@ The main difference from GitHub Actions is that pgflow itself is defined in a re
 
 - Single CLI application
 - Point CLI at a pgflow project folder
-- Load one YAML config file (for example `orchestrator.yml`) from that pgflow project folder
+- Load one YAML config file (for example `flow.yml`) from that pgflow project folder
 - Accept a separate target working directory at runtime through `--workdir <path>` and optionally as a positional argument
 - Default the target working directory to the current shell directory when not supplied
 - Sequential execution of actions in workflow order by default
@@ -142,15 +142,15 @@ Recommended repository layout:
 
 ```text
 /src
-  /Powergentic.AI.Orchestrator.Cli
-  /Powergentic.AI.Orchestrator.Core
-  /Powergentic.AI.Orchestrator.Actions.Script
-  /Powergentic.AI.Orchestrator.Actions.GitHubCopilot
-  /Powergentic.AI.Orchestrator.Yaml
-  /Powergentic.AI.Orchestrator.Logging
+  /Powergentic.AI.Flow.Cli
+  /Powergentic.AI.Flow.Core
+  /Powergentic.AI.Flow.Actions.Script
+  /Powergentic.AI.Flow.Actions.GitHubCopilot
+  /Powergentic.AI.Flow.Yaml
+  /Powergentic.AI.Flow.Logging
 /tests
-  /Powergentic.AI.Orchestrator.Core.Tests
-  /Powergentic.AI.Orchestrator.IntegrationTests
+  /Powergentic.AI.Flow.Core.Tests
+  /Powergentic.AI.Flow.IntegrationTests
 /samples
   /basic-script
   /copilot-review
@@ -159,13 +159,13 @@ Recommended repository layout:
 
 ### Project responsibilities
 
-#### `Powergentic.AI.Orchestrator.Cli`
+#### `Powergentic.AI.Flow.Cli`
 
 - `System.CommandLine` based CLI
 - commands/options
 - startup and dependency injection
 
-#### `Powergentic.AI.Orchestrator.Core`
+#### `Powergentic.AI.Flow.Core`
 
 - workflow domain models
 - execution engine
@@ -173,26 +173,26 @@ Recommended repository layout:
 - action contracts
 - context and result models
 
-#### `Powergentic.AI.Orchestrator.Actions.Script`
+#### `Powergentic.AI.Flow.Actions.Script`
 
 - bash/pwsh execution
 - process output capture
 - exit code handling
 
-#### `Powergentic.AI.Orchestrator.Actions.GitHubCopilot`
+#### `Powergentic.AI.Flow.Actions.GitHubCopilot`
 
 - adapter over GitHub Copilot SDK
 - prompt submission
 - result parsing
 - file/artifact capture if needed
 
-#### `Powergentic.AI.Orchestrator.Yaml`
+#### `Powergentic.AI.Flow.Yaml`
 
 - YAML parsing
 - schema mapping
 - validation helpers
 
-#### `Powergentic.AI.Orchestrator.Logging`
+#### `Powergentic.AI.Flow.Logging`
 
 - console logging
 - JSON log/event writer
@@ -206,7 +206,7 @@ A pgflow project folder might look like this:
 
 ```text
 my-pgflow-harness/
-  orchestrator.yml
+  flow.yml
   prompts/
     review.prompt.md
   scripts/
@@ -227,7 +227,7 @@ A typical invocation might then target a different repository or content folder 
 
 ### Conventions
 
-- `orchestrator.yml` is the default config filename
+- `flow.yml` is the default config filename
 - `logs/` is ignored by workflow logic except as output storage
 - workflow asset references such as `promptFile`, `path`, `file`, templates, and local assets resolve from the pgflow project folder
 - action execution defaults to the target working directory selected for the run

@@ -6,7 +6,7 @@
 
 ## What pgflow does
 
-- Loads a workflow from `orchestrator.yml` in a pgflow project folder
+- Loads a workflow from `flow.yml` in a pgflow project folder
 - Resolves workflow assets like prompt files and scripts from that project folder
 - Executes actions against a target working directory chosen at run time
 - Runs `script` actions with `bash` or `pwsh`
@@ -27,9 +27,9 @@
 From the repository root:
 
 ```bash
-dotnet build Powergentic.AI.Orchestrator.slnx
-dotnet test Powergentic.AI.Orchestrator.slnx
-dotnet run --project src/Powergentic.AI.Orchestrator.Cli -- run samples/basic-script
+dotnet build Powergentic.AI.Flow.slnx
+dotnet test Powergentic.AI.Flow.slnx
+dotnet run --project src/Powergentic.AI.Flow.Cli -- run samples/basic-script
 ```
 
 The last command uses `samples/basic-script` as both the pgflow project folder and the target working directory because the current shell directory is used by default when `--workdir` is not supplied.
@@ -46,7 +46,7 @@ Defaults:
 
 - `project-folder` defaults to the current directory
 - `target-working-directory` defaults to the current shell directory for `run`
-- `workflow-file` defaults to `orchestrator.yml`
+- `workflow-file` defaults to `flow.yml`
 
 ### Commands
 
@@ -109,7 +109,7 @@ pgflow run samples/basic-script --input audience=Developers --var greeting=Hello
 
 A pgflow project folder contains the reusable automation harness:
 
-- `orchestrator.yml`
+- `flow.yml`
 - prompt templates
 - helper scripts
 - logs
@@ -218,7 +218,8 @@ Prompt placeholders support both `{{name}}` and `${name}` forms.
 ## Runtime expressions
 
 Useful runtime values include:
-inputs.name }`
+
+- `${ inputs.name }`
 - `${ variables.name }`
 - `${ runtime.projectFolder }`
 - `${ runtime.targetWorkingDirectory }`
@@ -227,7 +228,6 @@ inputs.name }`
 - `${ runtime.currentActionId }`
 
 Workflow-level `inputs` are intended for caller-provided values, typically passed with `--input key=value`. Existing `variables` remain available for workflow-owned state and defaults.
-- `${ runtime.currentActionId }`
 
 ## Logs
 
@@ -253,8 +253,8 @@ pgflow logs <project-folder> --latest
 
 ## Solution layout
 
-- `src/Powergentic.AI.Orchestrator.Cli` - CLI entrypoint
-- `src/Powergentic.AI.Orchestrator.Core` - workflow models, validation, execution, logging
-- `src/Powergentic.AI.Orchestrator.Actions.Script` - local script runner
-- `src/Powergentic.AI.Orchestrator.Actions.GitHubCopilot` - Copilot action runner and adapter
-- `tests/Powergentic.AI.Orchestrator.Core.Tests` - unit tests
+- `src/Powergentic.AI.Flow.Cli` - CLI entrypoint
+- `src/Powergentic.AI.Flow.Core` - workflow models, validation, execution, logging
+- `src/Powergentic.AI.Flow.Actions.Script` - local script runner
+- `src/Powergentic.AI.Flow.Actions.GitHubCopilot` - Copilot action runner and adapter
+- `tests/Powergentic.AI.Flow.Core.Tests` - unit tests
