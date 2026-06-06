@@ -145,6 +145,7 @@ Common action fields:
 - `if`
 - `with`
 - `outputs`
+- `publish`
 - `next`
 
 Execution rules:
@@ -214,6 +215,38 @@ Supported `with` fields:
 - `requestHeaders`
 
 Prompt placeholders support both `{{name}}` and `${name}` forms.
+
+### Publish behavior
+
+If an action does not define `publish`, pgflow will automatically publish `actions.<id>.outputs.response` to both:
+
+- `console`
+- `runSummary`
+
+If `publish` is defined, that explicit configuration overrides the default behavior.
+
+Example:
+
+```yaml
+- id: analyze
+  uses: githubCopilot
+  with:
+    promptFile: prompts/final-analysis.prompt.md
+  publish:
+    - title: Final analysis
+      from: ${ actions.analyze.outputs.response }
+      to:
+        - console
+        - runSummary
+```
+
+Supported `publish` fields:
+
+- `title`
+- `from`
+- `to`
+- `if`
+- `maxLength`
 
 ## Runtime expressions
 

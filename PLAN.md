@@ -613,11 +613,24 @@ Use both:
 - human-readable console logging
 - structured JSON logs for machine analysis
 
-### Current gap noted by the new dev-loop sample
+### Publish behavior
 
-The sample workflow now emits a final GitHub Copilot analysis to both the run logs and the console. Writing the response to the run log folder is supported today through `writeResponseTo`, but echoing that Copilot-authored file back to the console currently requires a follow-up `script` action that reads the file and prints it.
+pgflow now supports first-class action publishing.
 
-That workaround is acceptable for MVP. A later enhancement could add first-class support for mirroring selected Copilot responses directly into pgflow console output and/or run summaries.
+Default behavior:
+
+- when an action does not define `publish`
+- and the action produces `outputs.response`
+- pgflow automatically publishes that response to:
+  - `console`
+  - `runSummary`
+
+Override behavior:
+
+- when an action defines `publish`
+- the explicit `publish` entries replace the default behavior for that action
+
+This allows Copilot-authored responses to appear in both the live console output and persisted `run.json` summaries without requiring a follow-up script action.
 
 ---
 

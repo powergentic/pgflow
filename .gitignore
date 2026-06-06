@@ -3,6 +3,7 @@ bin/
 obj/
 out/
 TestResults/
+TestResultsCoverage/
 artifacts/
 
 # User-specific files

@@ -295,7 +295,7 @@ public class WorkflowExecutorTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_PublishesConfiguredActionOutputsToRunSummary()
+    public async Task ExecuteAsync_PublishesResponseOutputByDefaultWhenPublishIsNotConfigured()
     {
         var projectFolder = CreateProjectFolder();
         var workflowFilePath = Path.Combine(projectFolder, "flow.yml");
@@ -309,21 +309,13 @@ public class WorkflowExecutorTests
                 new WorkflowActionDefinition
                 {
                     Id = "analyze",
+                    Name = "Analyze final state",
                     Uses = "script",
                     With = new Dictionary<string, object?>
                     {
                         ["shell"] = "bash",
                         ["run"] = "echo analyze"
-                    },
-                    Publish =
-                    [
-                        new WorkflowActionPublishDefinition
-                        {
-                            Title = "Final analysis",
-                            From = "${ actions.analyze.outputs.response }",
-                            To = ["runSummary"]
-                        }
-                    ]
+                    }
                 }
             ]
         };
@@ -349,15 +341,82 @@ public class WorkflowExecutorTests
 
             var publishedEntry = Assert.Single(result.PublishedEntries);
             Assert.Equal("analyze", publishedEntry.ActionId);
-            Assert.Equal("Final analysis", publishedEntry.Title);
+            Assert.Equal("Analyze final state", publishedEntry.Title);
             Assert.Equal("Ship the TODO app with the new Bootstrap form flow.", publishedEntry.Content);
+            Assert.Contains("console", publishedEntry.To, StringComparer.OrdinalIgnoreCase);
             Assert.Contains("runSummary", publishedEntry.To, StringComparer.OrdinalIgnoreCase);
 
             var runSummaryPath = Path.Combine(result.LogFolder, "run.json");
             var runSummaryJson = await File.ReadAllTextAsync(runSummaryPath);
             Assert.Contains("publishedEntries", runSummaryJson, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("Final analysis", runSummaryJson, StringComparison.Ordinal);
+            Assert.Contains("Analyze final state", runSummaryJson, StringComparison.Ordinal);
             Assert.Contains("Bootstrap form flow", runSummaryJson, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(projectFolder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_UsesExplicitPublishConfigurationInsteadOfDefaultResponsePublishing()
+    {
+        var projectFolder = CreateProjectFolder();
+        var workflowFilePath = Path.Combine(projectFolder, "flow.yml");
+        await File.WriteAllTextAsync(workflowFilePath, "name: placeholder");
+
+        var workflow = new WorkflowDefinition
+        {
+            Name = "demo",
+            Actions =
+            [
+                new WorkflowActionDefinition
+                {
+                    Id = "analyze",
+                    Uses = "script",
+                    With = new Dictionary<string, object?>
+                    {
+                        ["shell"] = "bash",
+                        ["run"] = "echo analyze"
+                    },
+                    Publish =
+                    [
+                        new WorkflowActionPublishDefinition
+                        {
+                            Title = "Final analysis",
+                            From = "${ actions.analyze.outputs.summary }",
+                            To = ["runSummary"]
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var executor = CreateExecutor(workflow,
+        [
+            new TestActionRunner("script", (context, _) => Task.FromResult(new ActionResult
+            {
+                ActionId = context.Action.Id,
+                Status = ActionExecutionStatus.Succeeded,
+                Outputs = new Dictionary<string, string?>
+                {
+                    ["response"] = "Default response that should not be auto-published.",
+                    ["summary"] = "Configured summary for the run report."
+                },
+                StartedAt = DateTimeOffset.UtcNow,
+                CompletedAt = DateTimeOffset.UtcNow,
+            }))
+        ]);
+
+        try
+        {
+            var result = await executor.ExecuteAsync(projectFolder, projectFolder, workflowFilePath);
+
+            var publishedEntry = Assert.Single(result.PublishedEntries);
+            Assert.Equal("Final analysis", publishedEntry.Title);
+            Assert.Equal("Configured summary for the run report.", publishedEntry.Content);
+            Assert.DoesNotContain("console", publishedEntry.To, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("runSummary", publishedEntry.To, StringComparer.OrdinalIgnoreCase);
         }
         finally
         {

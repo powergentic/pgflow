@@ -166,6 +166,11 @@ public sealed class WorkflowValidator(IEnumerable<IActionRunner>? actionRunners 
 
     private static void ValidatePublishConfiguration(WorkflowActionDefinition action, WorkflowValidationResult result)
     {
+        if (action.Publish is null)
+        {
+            return;
+        }
+
         for (var index = 0; index < action.Publish.Count; index++)
         {
             var publish = action.Publish[index];

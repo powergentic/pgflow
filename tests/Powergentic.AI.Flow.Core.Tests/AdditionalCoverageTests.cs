@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Powergentic.AI.Flow.Actions.GitHubCopilot;
 using Powergentic.AI.Flow.Actions.Script;
@@ -1211,6 +1212,248 @@ actions:
         }
     }
 
+    [Fact]
+    public async Task ScriptActionRunner_UsesAbsoluteWorkingDirectoryAndRemovesNullEnvironmentOverrides()
+    {
+        var projectFolder = CreateProjectFolder("script-absolute-workdir");
+        var targetWorkingDirectory = Path.Combine(projectFolder, "target");
+        var absoluteWorkingDirectory = Path.Combine(projectFolder, "absolute-working-directory");
+        Directory.CreateDirectory(targetWorkingDirectory);
+        Directory.CreateDirectory(absoluteWorkingDirectory);
+
+        try
+        {
+            var runner = new ScriptActionRunner(new NullLogger<ScriptActionRunner>());
+            var context = CreateActionContext(
+                new Dictionary<string, object?>
+                {
+                    ["shell"] = "bash",
+                    ["workingDirectory"] = absoluteWorkingDirectory,
+                    ["run"] = "echo \"base=${BASE:-missing}\" >> \"$ORCHESTRATOR_OUTPUT\"\npwd >> pwd.txt",
+                    ["environment"] = new Dictionary<string, object?>
+                    {
+                        ["BASE"] = null,
+                    }
+                },
+                projectFolder: projectFolder,
+                targetWorkingDirectory: targetWorkingDirectory,
+                environment: new Dictionary<string, string?>
+                {
+                    ["BASE"] = "from-host",
+                });
+
+            var result = await runner.RunAsync(context, CancellationToken.None);
+            var workingDirectory = (await File.ReadAllTextAsync(Path.Combine(absoluteWorkingDirectory, "pwd.txt"))).Trim();
+
+            Assert.Equal(ActionExecutionStatus.Succeeded, result.Status);
+            Assert.Equal(absoluteWorkingDirectory, result.Metadata["workingDirectory"]);
+            Assert.Equal("from-host", result.Outputs["base"]);
+            Assert.True(Directory.Exists(workingDirectory));
+            Assert.True(File.Exists(Path.Combine(workingDirectory, "pwd.txt")));
+        }
+        finally
+        {
+            Directory.Delete(projectFolder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ScriptActionRunner_ResolvesRelativeFileAgainstProjectFolder()
+    {
+        var projectFolder = CreateProjectFolder("script-relative-file");
+        var targetWorkingDirectory = Path.Combine(projectFolder, "target");
+        var scriptsFolder = Path.Combine(projectFolder, "scripts");
+        Directory.CreateDirectory(targetWorkingDirectory);
+        Directory.CreateDirectory(scriptsFolder);
+
+        var scriptPath = Path.Combine(scriptsFolder, "relative.sh");
+        await File.WriteAllTextAsync(scriptPath, "#!/usr/bin/env bash\nset -euo pipefail\necho \"fromFile=ok\" >> \"$ORCHESTRATOR_OUTPUT\"\n");
+        TryMakeExecutable(scriptPath);
+
+        try
+        {
+            var runner = new ScriptActionRunner(new NullLogger<ScriptActionRunner>());
+            var context = CreateActionContext(
+                new Dictionary<string, object?>
+                {
+                    ["shell"] = "bash",
+                    ["file"] = "scripts/relative.sh",
+                },
+                projectFolder: projectFolder,
+                targetWorkingDirectory: targetWorkingDirectory);
+
+            var result = await runner.RunAsync(context, CancellationToken.None);
+
+            Assert.Equal(ActionExecutionStatus.Succeeded, result.Status);
+            Assert.Equal(scriptPath, result.Metadata["scriptPath"]);
+            Assert.Equal("ok", result.Outputs["fromFile"]);
+        }
+        finally
+        {
+            Directory.Delete(projectFolder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ScriptActionRunner_ThrowsForMissingReferencedFile()
+    {
+        var projectFolder = CreateProjectFolder("script-missing-file");
+        var targetWorkingDirectory = Path.Combine(projectFolder, "target");
+        Directory.CreateDirectory(targetWorkingDirectory);
+
+        try
+        {
+            var runner = new ScriptActionRunner(new NullLogger<ScriptActionRunner>());
+            var context = CreateActionContext(
+                new Dictionary<string, object?>
+                {
+                    ["shell"] = "bash",
+                    ["file"] = "scripts/missing.sh",
+                },
+                projectFolder: projectFolder,
+                targetWorkingDirectory: targetWorkingDirectory);
+
+            var exception = await Assert.ThrowsAsync<FileNotFoundException>(() => runner.RunAsync(context, CancellationToken.None));
+
+            Assert.Contains("was not found", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(projectFolder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task GitHubCopilotActionRunner_PreservesInlineGitHubTokenWhenEnvironmentTokenExists()
+    {
+        var projectFolder = CreateProjectFolder("copilot-inline-token");
+        var targetWorkingDirectory = Path.Combine(projectFolder, "target");
+        Directory.CreateDirectory(targetWorkingDirectory);
+
+        CopilotPromptRequest? capturedRequest = null;
+        var adapter = new FakeCopilotClientAdapter(request =>
+        {
+            capturedRequest = request;
+            return Task.FromResult(new CopilotPromptResult
+            {
+                ResponseText = "done",
+                SessionId = "session-token",
+                MessageId = "message-token",
+                Model = request.Model,
+            });
+        });
+
+        try
+        {
+            var runner = new GitHubCopilotActionRunner(adapter, new NullLogger<GitHubCopilotActionRunner>());
+            var context = CreateActionContext(
+                new Dictionary<string, object?>
+                {
+                    ["prompt"] = "hello",
+                    ["gitHubToken"] = "inline-token",
+                },
+                new WorkflowActionDefinition
+                {
+                    Id = "review",
+                    Uses = "githubCopilot",
+                    With = new Dictionary<string, object?>
+                    {
+                        ["prompt"] = "hello",
+                        ["gitHubToken"] = "inline-token",
+                    }
+                },
+                projectFolder,
+                targetWorkingDirectory,
+                new Dictionary<string, string?>
+                {
+                    ["GITHUB_TOKEN"] = "environment-token",
+                });
+
+            var result = await runner.RunAsync(context, CancellationToken.None);
+
+            Assert.NotNull(capturedRequest);
+            Assert.Equal("inline-token", capturedRequest!.GitHubToken);
+            Assert.Equal("done", result.Outputs["response"]);
+        }
+        finally
+        {
+            Directory.Delete(projectFolder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task GitHubCopilotActionRunner_UsesAbsoluteWriteResponsePath()
+    {
+        var projectFolder = CreateProjectFolder("copilot-absolute-response-path");
+        var targetWorkingDirectory = Path.Combine(projectFolder, "target");
+        var responsePath = Path.Combine(projectFolder, "responses", "review.txt");
+        Directory.CreateDirectory(targetWorkingDirectory);
+
+        var adapter = new FakeCopilotClientAdapter(request => Task.FromResult(new CopilotPromptResult
+        {
+            ResponseText = "stored-response",
+            SessionId = "session-absolute",
+            MessageId = "message-absolute",
+            Model = request.Model,
+        }));
+
+        try
+        {
+            var runner = new GitHubCopilotActionRunner(adapter, new NullLogger<GitHubCopilotActionRunner>());
+            var context = CreateActionContext(
+                new Dictionary<string, object?>
+                {
+                    ["prompt"] = "hello",
+                    ["writeResponseTo"] = responsePath,
+                },
+                new WorkflowActionDefinition
+                {
+                    Id = "review",
+                    Uses = "githubCopilot",
+                    With = new Dictionary<string, object?>
+                    {
+                        ["prompt"] = "hello",
+                        ["writeResponseTo"] = responsePath,
+                    }
+                },
+                projectFolder,
+                targetWorkingDirectory);
+
+            var result = await runner.RunAsync(context, CancellationToken.None);
+
+            Assert.Equal(responsePath, result.Outputs["responseFile"]);
+            Assert.Equal(responsePath, result.Metadata["responseFile"]);
+            Assert.Equal("stored-response", await File.ReadAllTextAsync(responsePath));
+        }
+        finally
+        {
+            Directory.Delete(projectFolder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ServiceCollectionExtensions_RegisterGitHubCopilotServices()
+    {
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+
+        services.AddGitHubCopilotAction();
+
+        Assert.Contains(services, descriptor =>
+            descriptor.ServiceType == typeof(ICopilotClientAdapter)
+            && descriptor.ImplementationType == typeof(CopilotClientAdapter));
+        Assert.Contains(services, descriptor =>
+            descriptor.ServiceType == typeof(IActionRunner)
+            && descriptor.ImplementationType == typeof(GitHubCopilotActionRunner));
+    }
+
+    [Fact]
+    public void Program_MainReturnsCliApplicationTask()
+    {
+        var task = Program.Main(["help"]);
+
+        Assert.NotNull(task);
+    }
+
     private static ActionExecutionContext CreateActionContext(
         Dictionary<string, object?> resolvedInputs,
         WorkflowActionDefinition? action = null,
@@ -1310,6 +1553,11 @@ actions:
 
     private static void TryMakeExecutable(string scriptPath)
     {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
         try
         {
             File.SetUnixFileMode(scriptPath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);

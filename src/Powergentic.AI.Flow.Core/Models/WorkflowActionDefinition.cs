@@ -8,6 +8,6 @@ public sealed class WorkflowActionDefinition
     public string? If { get; set; }
     public Dictionary<string, object?> With { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, string?> Outputs { get; set; } = new(StringComparer.OrdinalIgnoreCase);
-    public List<WorkflowActionPublishDefinition> Publish { get; set; } = [];
+    public List<WorkflowActionPublishDefinition>? Publish { get; set; }
     public List<WorkflowTransitionDefinition> Next { get; set; } = [];
 }

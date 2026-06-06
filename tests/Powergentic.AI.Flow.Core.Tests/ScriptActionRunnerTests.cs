@@ -18,7 +18,16 @@ public class ScriptActionRunnerTests
 
         var scriptPath = Path.Combine(projectFolder, "scripts", "hello.sh");
         await File.WriteAllTextAsync(scriptPath, "#!/usr/bin/env bash\nset -euo pipefail\npwd > working-dir.txt\necho \"target=$ORCHESTRATOR_TARGET_WORKING_DIRECTORY\" >> \"$ORCHESTRATOR_OUTPUT\"\n");
-        try { File.SetUnixFileMode(scriptPath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute); } catch { }
+        if (!OperatingSystem.IsWindows())
+        {
+            try
+            {
+                File.SetUnixFileMode(scriptPath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            }
+            catch
+            {
+            }
+        }
 
         try
         {

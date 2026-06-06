@@ -228,8 +228,28 @@ public sealed class WorkflowExecutor(
     private List<WorkflowPublishedEntry> CreatePublishedEntries(WorkflowActionDefinition action, ExecutionContextModel context)
     {
         var entries = new List<WorkflowPublishedEntry>();
+        var publishDefinitions = action.Publish;
 
-        foreach (var publish in action.Publish)
+        if (publishDefinitions is null)
+        {
+            var defaultContent = context.GetActionResult(action.Id)?.Outputs.GetValueOrDefault("response");
+            if (string.IsNullOrWhiteSpace(defaultContent))
+            {
+                return entries;
+            }
+
+            entries.Add(new WorkflowPublishedEntry
+            {
+                ActionId = action.Id,
+                Title = action.Name ?? action.Id,
+                Content = defaultContent,
+                To = ["console", "runSummary"],
+            });
+
+            return entries;
+        }
+
+        foreach (var publish in publishDefinitions)
         {
             if (!expressions.EvaluateCondition(publish.If, context))
             {
