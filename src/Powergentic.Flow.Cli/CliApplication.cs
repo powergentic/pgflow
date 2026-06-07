@@ -55,6 +55,8 @@ public static class CliApplication
 
     private static async Task<int> RunWorkflowAsync(ParsedCommand command, CancellationToken cancellationToken)
     {
+        Console.WriteLine("Starting flow execution...");
+        
         var projectFolder = ResolveProjectFolder(command.ProjectFolder);
         var targetWorkingDirectory = ResolveTargetWorkingDirectory(command.TargetWorkingDirectory);
         var workflowFile = ResolveWorkflowFile(projectFolder, command.WorkflowFile);
@@ -698,7 +700,8 @@ public static class CliApplication
         }
         else
         {
-            Console.Error.WriteLine(message);
+            Console.Error.WriteLine(Colorize(AnsiRed, "Error: ") + message);
+            Console.WriteLine("");
         }
 
         return 2;
@@ -706,15 +709,7 @@ public static class CliApplication
 
     private static int WriteUnhandledError(Exception ex, bool json)
     {
-        if (json)
-        {
-            WriteJson(new { succeeded = false, error = ex.Message });
-        }
-        else
-        {
-            Console.Error.WriteLine(ex.Message);
-        }
-
+        WriteError(json, ex.Message);
         return 10;
     }
 
@@ -749,17 +744,18 @@ public static class CliApplication
         => $"Copyright © {DateTime.UtcNow.Year} Build5Nines LLC";
 
     private const string AnsiReset = "\u001b[0m";
+    private const string AnsiRed = "\u001b[31m";
     private const string AnsiYellow = "\u001b[33m";
     private const string AnsiGreen = "\u001b[32m";
     private const int BannerContentWidth = 78;
+
+    private static string Colorize(string color, string text)
+        => $"{color}{text}{AnsiReset}";
 
     private static string GetBannerText()
     {
         static string PadBannerLine(string text)
             => text.Length >= BannerContentWidth ? text[..BannerContentWidth] : text.PadRight(BannerContentWidth);
-
-        static string Colorize(string color, string text)
-            => $"{color}{text}{AnsiReset}";
 
         return string.Join(
             Environment.NewLine,
