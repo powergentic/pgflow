@@ -51,11 +51,53 @@ public class GitHubCopilotActionRunnerTests
 
             Assert.NotNull(capturedRequest);
             Assert.Equal("Hello Copilot from workspace", capturedRequest!.Prompt);
+            Assert.Equal("gpt-5", capturedRequest.Model);
             Assert.Equal(targetWorkingDirectory, capturedRequest.WorkingDirectory);
             Assert.Equal(Path.Combine(targetWorkingDirectory, "output", "review.txt"), result.Outputs["responseFile"]);
             Assert.Equal("done", await File.ReadAllTextAsync(Path.Combine(targetWorkingDirectory, "output", "review.txt")));
+            Assert.Equal("gpt-5", result.Outputs["model"]);
             Assert.Equal("12", result.Outputs["outputTokens"]);
             Assert.Equal(targetWorkingDirectory, result.Metadata["workingDirectory"]);
+        }
+        finally
+        {
+            Directory.Delete(projectFolder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task RunAsync_DefaultsModelToAutoWhenNotSpecified()
+    {
+        var projectFolder = CreateProjectFolder();
+        var targetWorkingDirectory = Path.Combine(projectFolder, "target");
+        Directory.CreateDirectory(targetWorkingDirectory);
+
+        CopilotPromptRequest? capturedRequest = null;
+        var adapter = new FakeCopilotClientAdapter(request =>
+        {
+            capturedRequest = request;
+            return Task.FromResult(new CopilotPromptResult
+            {
+                ResponseText = "done",
+                SessionId = "session-auto",
+                MessageId = "message-auto",
+                Model = request.Model,
+            });
+        });
+
+        try
+        {
+            var runner = new GitHubCopilotActionRunner(adapter, new NullLogger<GitHubCopilotActionRunner>());
+            var context = CreateActionContext(projectFolder, targetWorkingDirectory, new Dictionary<string, object?>
+            {
+                ["prompt"] = "hello"
+            });
+
+            var result = await runner.RunAsync(context, CancellationToken.None);
+
+            Assert.NotNull(capturedRequest);
+            Assert.Equal("auto", capturedRequest!.Model);
+            Assert.Equal("auto", result.Outputs["model"]);
         }
         finally
         {

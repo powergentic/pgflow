@@ -1458,7 +1458,7 @@ actions:
 
                 Assert.Equal(2, exitCode);
                 Assert.Equal(string.Empty, stdout);
-                Assert.Contains("GitHub Copilot action requires the 'copilot' CLI", stderr, StringComparison.OrdinalIgnoreCase);
+                Assert.Contains("Error: GitHub Copilot action requires the GitHub Copilot CLI, but it is not installed or not available on PATH.", stderr, StringComparison.OrdinalIgnoreCase);
             }
             finally
             {

@@ -23,11 +23,12 @@ public sealed class GitHubCopilotActionRunner(ICopilotClientAdapter copilotClien
 
         context.Environment.TryGetValue("GITHUB_TOKEN", out var envToken);
 
+        var configuredModel = context.GetString("model");
         var request = new CopilotPromptRequest
         {
             Prompt = prompt,
             WorkingDirectory = workingDirectory,
-            Model = context.GetString("model"),
+            Model = string.IsNullOrWhiteSpace(configuredModel) ? "auto" : configuredModel,
             SystemPrompt = context.GetString("systemPrompt"),
             Streaming = bool.TryParse(context.GetString("streaming"), out var streaming) && streaming,
             GitHubToken = context.GetString("gitHubToken") ?? envToken,

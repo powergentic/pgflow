@@ -21,6 +21,7 @@ actions:
     name: Implement from user prompt
     uses: githubCopilot
     with:
+      model: auto
       promptFile: prompts/build-app.prompt.md
       inputs:
         targetPath: ${ runtime.targetWorkingDirectory }
@@ -75,6 +76,7 @@ actions:
     name: Analyze final project state
     uses: githubCopilot
     with:
+      model: auto
       promptFile: prompts/final-analysis.prompt.md
       inputs:
         targetPath: ${ runtime.targetWorkingDirectory }
