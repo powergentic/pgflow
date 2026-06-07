@@ -4,7 +4,7 @@ variables:
   # Override this at runtime, for example:
   # pgflow run samples/script-and-copilot-loop <target-working-directory> --var userPrompt="Build a TODO app for a small team"
   userPrompt: Build an ASP.NET Core MVC TODO list application that uses Bootstrap CSS and a traditional HTTP GET/POST request model.
-  minimumCoverage: 90
+  minimumCodeCoveragePercent: 90
 execution:
   startAt: prepare
   maxTransitions: 30
@@ -25,7 +25,7 @@ actions:
       inputs:
         targetPath: ${ runtime.targetWorkingDirectory }
         userPrompt: ${ variables.userPrompt }
-        minimumCoverage: ${ variables.minimumCoverage }
+        minimumCodeCoveragePercent: ${ variables.minimumCodeCoveragePercent }
         workspaceStatusFile: ${ actions.prepare.outputs.workspaceStatusFile }
         workspaceSummary: ${ actions.prepare.outputs.workspaceSummary }
         appExists: ${ actions.prepare.outputs.appExists }
@@ -66,7 +66,7 @@ actions:
       path: scripts/check-coverage.sh
       failOnNonZeroExit: false
       environment:
-        MINIMUM_COVERAGE: ${ variables.minimumCoverage }
+        MINIMUM_CODE_COVERAGE_PERCENT: ${ variables.minimumCodeCoveragePercent }
     next:
       - when: ${{ actions.coverage.outputs.coveragePassed != 'true' }}
         goto: implement
