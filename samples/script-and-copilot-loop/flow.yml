@@ -6,9 +6,8 @@ variables:
   userPrompt: Build an ASP.NET Core MVC TODO list application that uses Bootstrap CSS and a traditional HTTP GET/POST request model.
   minimumCodeCoveragePercent: 90
 execution:
-  startAt: prepare
-  maxTransitions: 30
-  maxVisitsPerAction: 10
+  maxTransitions: 100
+  maxVisitsPerAction: 50
 actions:
   - id: prepare
     name: Inspect target workspace

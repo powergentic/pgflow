@@ -81,11 +81,6 @@ public sealed class WorkflowValidator(IEnumerable<IActionRunner>? actionRunners 
             .Select(a => a.Id)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        if (!string.IsNullOrWhiteSpace(workflow.Execution.StartAt) && !actionIds.Contains(workflow.Execution.StartAt))
-        {
-            result.Errors.Add($"execution.startAt '{workflow.Execution.StartAt}' does not match an action id.");
-        }
-
         foreach (var action in workflow.Actions)
         {
             var actionIndex = workflow.Actions.FindIndex(candidate => string.Equals(candidate.Id, action.Id, StringComparison.OrdinalIgnoreCase));

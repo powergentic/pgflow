@@ -228,6 +228,50 @@ public sealed class AdditionalCoverageTests
     }
 
     [Fact]
+    public async Task ScriptActionRunner_CapturesOutputsBeforeNonZeroExitWhenFailOnNonZeroExitIsFalse()
+    {
+        var projectFolder = CreateProjectFolder("script-nonzero-outputs");
+        var targetWorkingDirectory = Path.Combine(projectFolder, "target");
+        Directory.CreateDirectory(targetWorkingDirectory);
+
+        try
+        {
+            var runner = new ScriptActionRunner(new NullLogger<ScriptActionRunner>());
+            var context = CreateActionContext(
+                new Dictionary<string, object?>
+                {
+                    ["shell"] = "bash",
+                    ["run"] = "echo \"coveragePassed=false\" >> \"$ORCHESTRATOR_OUTPUT\"\necho \"coveragePercent=75.00\" >> \"$ORCHESTRATOR_OUTPUT\"\nexit 1",
+                    ["failOnNonZeroExit"] = "false",
+                },
+                new WorkflowActionDefinition
+                {
+                    Id = "script-nonzero-outputs",
+                    Uses = "script",
+                    With = new Dictionary<string, object?>
+                    {
+                        ["shell"] = "bash",
+                        ["run"] = "echo \"coveragePassed=false\" >> \"$ORCHESTRATOR_OUTPUT\"\necho \"coveragePercent=75.00\" >> \"$ORCHESTRATOR_OUTPUT\"\nexit 1",
+                        ["failOnNonZeroExit"] = "false",
+                    }
+                },
+                projectFolder,
+                targetWorkingDirectory);
+
+            var result = await runner.RunAsync(context, CancellationToken.None);
+
+            Assert.Equal(ActionExecutionStatus.Succeeded, result.Status);
+            Assert.Equal(1, result.ExitCode);
+            Assert.Equal("false", result.Outputs["coveragePassed"]);
+            Assert.Equal("75.00", result.Outputs["coveragePercent"]);
+        }
+        finally
+        {
+            Directory.Delete(projectFolder, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task GitHubCopilotActionRunner_UsesInlinePromptEnvTokenAndRequestHeaders()
     {
         var projectFolder = CreateProjectFolder("copilot-inline");
@@ -385,14 +429,13 @@ actions:
     }
 
     [Fact]
-    public void WorkflowValidator_FailsForMissingActionIdDuplicateIdsAndBadStartAt()
+    public void WorkflowValidator_FailsForMissingActionIdDuplicateIdsAndInvalidExecutionLimits()
     {
         var workflow = new WorkflowDefinition
         {
             Name = "validator-demo",
             Execution = new WorkflowExecutionOptions
             {
-                StartAt = "missing",
                 MaxTransitions = 0,
                 MaxVisitsPerAction = 0,
             },
@@ -443,7 +486,6 @@ actions:
         Assert.Contains(result.Errors, error => error.Contains("Every action must have a non-empty id", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(result.Errors, error => error.Contains("Duplicate action id 'dup'", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(result.Errors, error => error.Contains("next transition without goto", StringComparison.OrdinalIgnoreCase));
-        Assert.Contains(result.Errors, error => error.Contains("execution.startAt 'missing'", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(result.Errors, error => error.Contains("maxTransitions", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(result.Errors, error => error.Contains("maxVisitsPerAction", StringComparison.OrdinalIgnoreCase));
     }
@@ -612,6 +654,7 @@ actions:
             Assert.Equal(0, exitCode);
             Assert.Contains("script-and-copilot-loop", stdout, StringComparison.OrdinalIgnoreCase);
             Assert.True(File.Exists(Path.Combine(projectFolder, "flow.yml")));
+            Assert.DoesNotContain("startAt:", await File.ReadAllTextAsync(Path.Combine(projectFolder, "flow.yml")), StringComparison.OrdinalIgnoreCase);
             Assert.True(File.Exists(Path.Combine(projectFolder, "scripts", "prepare.sh")));
             Assert.True(File.Exists(Path.Combine(projectFolder, "prompts", "review.prompt.md")));
             Assert.Equal(string.Empty, stderr);
@@ -982,6 +1025,40 @@ actions:
             Assert.Equal(10, exitCode);
             Assert.Contains("\"command\": \"validate\"", stdout, StringComparison.Ordinal);
             Assert.Equal(string.Empty, stderr);
+        }
+        finally
+        {
+            Directory.Delete(projectFolder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task WorkflowLoader_RejectsRemovedExecutionStartAtSetting()
+    {
+        var projectFolder = CreateProjectFolder("loader-startat-removed");
+
+        try
+        {
+            var workflowFilePath = Path.Combine(projectFolder, "flow.yml");
+            await File.WriteAllTextAsync(workflowFilePath, """
+name: Removed StartAt Demo
+version: 1
+execution:
+  startAt: prepare
+  maxTransitions: 3
+actions:
+  - id: prepare
+    uses: script
+    with:
+      shell: bash
+      run: echo hello
+""");
+
+            var loader = new WorkflowLoader();
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => loader.LoadAsync(workflowFilePath));
+
+            Assert.Contains("execution.startAt", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("first action", exception.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

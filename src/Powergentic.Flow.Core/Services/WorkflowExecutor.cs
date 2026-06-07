@@ -85,7 +85,7 @@ public sealed class WorkflowExecutor(
         await logWriter.WriteResolvedWorkflowAsync(paths, workflow, cancellationToken);
 
         var actionsById = workflow.Actions.ToDictionary(a => a.Id, StringComparer.OrdinalIgnoreCase);
-        var currentActionId = workflow.Execution.StartAt ?? workflow.Actions[0].Id;
+        var currentActionId = workflow.Actions[0].Id;
 
         while (!string.IsNullOrWhiteSpace(currentActionId))
         {
@@ -94,7 +94,7 @@ public sealed class WorkflowExecutor(
             context.TransitionCount++;
             if (context.TransitionCount > workflow.Execution.MaxTransitions)
             {
-                throw new InvalidOperationException($"Workflow exceeded maxTransitions of {workflow.Execution.MaxTransitions}.");
+                throw new InvalidOperationException($"Flow exceeded maxTransitions of {workflow.Execution.MaxTransitions}.");
             }
 
             if (!actionsById.TryGetValue(currentActionId, out var action))
@@ -141,7 +141,7 @@ public sealed class WorkflowExecutor(
                     Logger = logger,
                 };
 
-                logger.LogInformation("Running action \"{ActionId}\" ({ActionType})", action.Id, action.Uses);
+                logger.LogInformation("Running action '{ActionId}' ({ActionType})", action.Id, action.Uses);
                 result = await runner.RunAsync(actionContext, cancellationToken);
                 result.StartedAt = result.StartedAt == default ? DateTimeOffset.UtcNow : result.StartedAt;
                 result.CompletedAt = result.CompletedAt == default ? DateTimeOffset.UtcNow : result.CompletedAt;

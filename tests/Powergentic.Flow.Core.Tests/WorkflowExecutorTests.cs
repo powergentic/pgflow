@@ -19,7 +19,6 @@ public class WorkflowExecutorTests
             Name = "demo",
             Execution = new WorkflowExecutionOptions
             {
-                StartAt = "prepare",
                 MaxTransitions = 5,
                 MaxVisitsPerAction = 2,
             },
@@ -174,7 +173,6 @@ public class WorkflowExecutorTests
             Name = "demo",
             Execution = new WorkflowExecutionOptions
             {
-                StartAt = "loop",
                 MaxTransitions = 2,
                 MaxVisitsPerAction = 5,
             },
@@ -335,6 +333,7 @@ public class WorkflowExecutorTests
             }))
         ]);
 
+        await ConsoleTestSynchronization.Gate.WaitAsync();
         try
         {
             var result = await executor.ExecuteAsync(projectFolder, projectFolder, workflowFilePath);
@@ -354,6 +353,7 @@ public class WorkflowExecutorTests
         }
         finally
         {
+            ConsoleTestSynchronization.Gate.Release();
             Directory.Delete(projectFolder, recursive: true);
         }
     }

@@ -105,7 +105,7 @@ fi
 
 {
   echo "Coverage target: $coverage_target"
-  echo "Minimum coverage required: $minimum_coverage%"
+  echo "Minimum coverage required: $minimum_code_coverage_percent%"
   echo "Measured coverage: $coverage_percent%"
   echo "Coverage files:"
   for file in "${coverage_files[@]}"; do

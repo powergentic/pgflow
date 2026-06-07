@@ -265,7 +265,6 @@ env:
   COPILOT_MODEL: gpt-5-codex
 
 execution:
-  startAt: setup
   maxTransitions: 25
   maxVisitsPerAction: 10
 
@@ -652,7 +651,7 @@ Validation should happen before execution where possible.
    - supported action type names only
    - shell values are valid
    - all `goto` targets exist
-   - `startAt` points to a valid action id when configured
+   - reject retired settings such as `execution.startAt`
    - reject unconditional `goto` entries that point to the next action in file order because normal sequencing already handles that case
    - loop guard values such as `maxTransitions` and `maxVisitsPerAction` are positive and reasonable
    - detect obviously invalid control-flow definitions such as dead targets or unconditional self-loops without safeguards
@@ -755,7 +754,6 @@ Possible later additions:
 
 ### WorkflowExecutionOptions
 
-- `StartAt`
 - `MaxTransitions`
 - `MaxVisitsPerAction`
 
