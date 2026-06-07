@@ -29,18 +29,25 @@ public sealed class RunLogWriter
 
     public async Task WriteResolvedWorkflowAsync(WorkflowPaths paths, WorkflowDefinition workflow, CancellationToken cancellationToken)
     {
+        var resolvedWorkflowPath = Path.Combine(paths.RunFolder, "workflow-resolved.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(resolvedWorkflowPath)!);
+
         var content = JsonSerializer.Serialize(workflow, JsonOptions);
-        await File.WriteAllTextAsync(Path.Combine(paths.RunFolder, "workflow-resolved.json"), content, cancellationToken);
+        await File.WriteAllTextAsync(resolvedWorkflowPath, content, cancellationToken);
     }
 
     public async Task WriteActionLogAsync(ActionLogData logData, string actionFilePath, CancellationToken cancellationToken)
     {
+        Directory.CreateDirectory(Path.GetDirectoryName(actionFilePath)!);
+
         var content = JsonSerializer.Serialize(logData, JsonOptions);
         await File.WriteAllTextAsync(actionFilePath, content, cancellationToken);
     }
 
     public async Task WriteRunSummaryAsync(WorkflowRunResult result, string runFilePath, CancellationToken cancellationToken)
     {
+        Directory.CreateDirectory(Path.GetDirectoryName(runFilePath)!);
+
         var content = JsonSerializer.Serialize(result, JsonOptions);
         await File.WriteAllTextAsync(runFilePath, content, cancellationToken);
     }
