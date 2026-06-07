@@ -2,6 +2,8 @@
 
 `pgflow` is an AI harness and orchestrator for running workflows built using deterministic scripts and AI prompts within a `pgflow` project folder taking actions within a target working directory.
 
+[Quick Start](QUICK-START.md) | [flow.yml Schema](SCHEMA.md)
+
 ![pgflow screenshot](docs/images/pgflow-screenshot.png)
 
 ## What pgflow does
@@ -70,6 +72,7 @@ Defaults:
 - `--run-id <id>` - select a specific run for `logs`
 - `--latest` - show the latest run summary
 - `--force` - allow `init` in a non-empty folder
+- `--display-enhanced` - show a live execution dashboard in interactive terminals while logs continue to stream
 - `--verbose` - enable verbose console logging
 - `--json` - emit JSON output
 
@@ -104,6 +107,31 @@ Run with input, variable, and environment overrides:
 ```bash
 pgflow run samples/basic-script --input audience=Developers --var greeting=Hello --env NAME=Chris
 ```
+
+Run with the enhanced live dashboard in an interactive terminal:
+
+```bash
+pgflow run samples/basic-script --display-enhanced
+```
+
+## Enhanced display and console transcript
+
+When `--display-enhanced` is enabled, pgflow keeps a pinned dashboard at the bottom of the terminal while normal console output continues to scroll above it.
+
+The dashboard includes:
+
+- current action name and action type
+- action start time
+- total flow elapsed time
+- current action elapsed time
+- current visit count for the action
+- transition progress
+- action result totals
+- last status message
+
+![Screenshot of --display-enhanced](docs/images/pgflow-screenshot-display-enhanced.png)
+
+The enhanced display is only used for interactive terminals. Redirected output and `--json` mode stay non-interactive.
 
 ## Project folder versus target working directory
 
@@ -270,8 +298,13 @@ Typical files include:
 
 - `workflow-resolved.json`
 - `run.json`
+- `console.log`
 - `actions/*.json`
 - script stdout/stderr files when applicable
+
+`console.log` is a human-readable transcript of the run. It captures the operator-facing console activity, published console entries, and mirrored diagnostic logging for that run.
+
+`run.json` now includes the `consoleLogFile` path, and `pgflow logs` prints that path as `Console Log` when it is available.
 
 Inspect the latest run with:
 
