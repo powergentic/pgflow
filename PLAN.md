@@ -142,15 +142,15 @@ Recommended repository layout:
 
 ```text
 /src
-  /Powergentic.AI.Flow.Cli
-  /Powergentic.AI.Flow.Core
-  /Powergentic.AI.Flow.Actions.Script
-  /Powergentic.AI.Flow.Actions.GitHubCopilot
-  /Powergentic.AI.Flow.Yaml
-  /Powergentic.AI.Flow.Logging
+  /Powergentic.Flow.Cli
+  /Powergentic.Flow.Core
+  /Powergentic.Flow.Actions.Script
+  /Powergentic.Flow.Actions.GitHubCopilot
+  /Powergentic.Flow.Yaml
+  /Powergentic.Flow.Logging
 /tests
-  /Powergentic.AI.Flow.Core.Tests
-  /Powergentic.AI.Flow.IntegrationTests
+  /Powergentic.Flow.Core.Tests
+  /Powergentic.Flow.IntegrationTests
 /samples
   /basic-script
   /copilot-review
@@ -159,13 +159,13 @@ Recommended repository layout:
 
 ### Project responsibilities
 
-#### `Powergentic.AI.Flow.Cli`
+#### `Powergentic.Flow.Cli`
 
 - `System.CommandLine` based CLI
 - commands/options
 - startup and dependency injection
 
-#### `Powergentic.AI.Flow.Core`
+#### `Powergentic.Flow.Core`
 
 - workflow domain models
 - execution engine
@@ -173,26 +173,26 @@ Recommended repository layout:
 - action contracts
 - context and result models
 
-#### `Powergentic.AI.Flow.Actions.Script`
+#### `Powergentic.Flow.Actions.Script`
 
 - bash/pwsh execution
 - process output capture
 - exit code handling
 
-#### `Powergentic.AI.Flow.Actions.GitHubCopilot`
+#### `Powergentic.Flow.Actions.GitHubCopilot`
 
 - adapter over GitHub Copilot SDK
 - prompt submission
 - result parsing
 - file/artifact capture if needed
 
-#### `Powergentic.AI.Flow.Yaml`
+#### `Powergentic.Flow.Yaml`
 
 - YAML parsing
 - schema mapping
 - validation helpers
 
-#### `Powergentic.AI.Flow.Logging`
+#### `Powergentic.Flow.Logging`
 
 - console logging
 - JSON log/event writer

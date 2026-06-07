@@ -1,0 +1,114 @@
+using Microsoft.Extensions.Logging;
+using Powergentic.Flow.Core.Abstractions;
+using Powergentic.Flow.Core.Models;
+
+namespace Powergentic.Flow.Actions.GitHubCopilot;
+
+public sealed class GitHubCopilotActionRunner(ICopilotClientAdapter copilotClient, ILogger<GitHubCopilotActionRunner> logger) : IActionRunner
+{
+    public string ActionType => "githubCopilot";
+
+    public async Task<ActionResult> RunAsync(ActionExecutionContext context, CancellationToken cancellationToken)
+    {
+        var startedAt = DateTimeOffset.UtcNow;
+        var prompt = await ResolvePromptAsync(context, cancellationToken);
+        var writeResponseTo = context.GetString("writeResponseTo");
+        var responsePath = string.IsNullOrWhiteSpace(writeResponseTo)
+            ? null
+            : ResolvePath(context.TargetWorkingDirectory, writeResponseTo);
+        var configuredWorkingDirectory = context.GetString("workingDirectory");
+        var workingDirectory = string.IsNullOrWhiteSpace(configuredWorkingDirectory)
+            ? context.TargetWorkingDirectory
+            : ResolvePath(context.TargetWorkingDirectory, configuredWorkingDirectory);
+
+        context.Environment.TryGetValue("GITHUB_TOKEN", out var envToken);
+
+        var request = new CopilotPromptRequest
+        {
+            Prompt = prompt,
+            WorkingDirectory = workingDirectory,
+            Model = context.GetString("model"),
+            SystemPrompt = context.GetString("systemPrompt"),
+            Streaming = bool.TryParse(context.GetString("streaming"), out var streaming) && streaming,
+            GitHubToken = context.GetString("gitHubToken") ?? envToken,
+            RequestHeaders = context.GetStringMap("requestHeaders")
+                .Where(pair => !string.IsNullOrWhiteSpace(pair.Value))
+                .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase),
+        };
+
+        logger.LogInformation("Sending prompt to GitHub Copilot for action {ActionId} in {WorkingDirectory}", context.Action.Id, workingDirectory);
+        var result = await copilotClient.PromptAsync(request, cancellationToken);
+
+        if (!string.IsNullOrWhiteSpace(responsePath))
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(responsePath)!);
+            await File.WriteAllTextAsync(responsePath, result.ResponseText, cancellationToken);
+        }
+
+        var outputs = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["response"] = result.ResponseText,
+            ["responseFile"] = responsePath,
+            ["sessionId"] = result.SessionId,
+            ["messageId"] = result.MessageId,
+            ["model"] = result.Model,
+        };
+
+        if (result.OutputTokens is not null)
+        {
+            outputs["outputTokens"] = result.OutputTokens.ToString();
+        }
+
+        var metadata = new Dictionary<string, object?>(result.Metadata ?? new Dictionary<string, object?>(), StringComparer.OrdinalIgnoreCase)
+        {
+            ["workingDirectory"] = workingDirectory,
+            ["responseFile"] = responsePath,
+        };
+
+        return new ActionResult
+        {
+            ActionId = context.Action.Id,
+            Status = ActionExecutionStatus.Succeeded,
+            Summary = "GitHub Copilot prompt completed.",
+            Outputs = outputs,
+            Metadata = metadata,
+            StartedAt = startedAt,
+            CompletedAt = DateTimeOffset.UtcNow,
+        };
+    }
+
+    private static async Task<string> ResolvePromptAsync(ActionExecutionContext context, CancellationToken cancellationToken)
+    {
+        var inlinePrompt = context.GetString("prompt");
+        var promptFile = context.GetString("promptFile");
+        var promptTemplate = !string.IsNullOrWhiteSpace(promptFile)
+            ? await File.ReadAllTextAsync(ResolvePath(context.ProjectFolder, promptFile), cancellationToken)
+            : inlinePrompt;
+
+        if (string.IsNullOrWhiteSpace(promptTemplate))
+        {
+            throw new InvalidOperationException($"Action '{context.Action.Id}' requires 'with.prompt' or 'with.promptFile'.");
+        }
+
+        var inputs = context.ResolvedInputs.TryGetValue("inputs", out var inputsValue) && inputsValue is Dictionary<string, object?> objectMap
+            ? objectMap.ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.ToString(), StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+
+        return ApplyTemplate(promptTemplate, inputs);
+    }
+
+    private static string ApplyTemplate(string template, Dictionary<string, string?> inputs)
+    {
+        var content = template;
+        foreach (var input in inputs)
+        {
+            content = content.Replace($"{{{{{input.Key}}}}}", input.Value ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+            content = content.Replace($"${{{input.Key}}}", input.Value ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        }
+
+        return content;
+    }
+
+    private static string ResolvePath(string projectFolder, string path)
+        => Path.IsPathRooted(path) ? path : Path.GetFullPath(Path.Combine(projectFolder, path));
+}

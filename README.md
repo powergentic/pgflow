@@ -27,9 +27,9 @@
 From the repository root:
 
 ```bash
-dotnet build Powergentic.AI.Flow.slnx
-dotnet test Powergentic.AI.Flow.slnx
-dotnet run --project src/Powergentic.AI.Flow.Cli -- run samples/basic-script
+dotnet build Powergentic.Flow.slnx
+dotnet test Powergentic.Flow.slnx
+dotnet run --project src/Powergentic.Flow.Cli -- run samples/basic-script
 ```
 
 The last command uses `samples/basic-script` as both the pgflow project folder and the target working directory because the current shell directory is used by default when `--workdir` is not supplied.
@@ -286,8 +286,8 @@ pgflow logs <project-folder> --latest
 
 ## Solution layout
 
-- `src/Powergentic.AI.Flow.Cli` - CLI entrypoint
-- `src/Powergentic.AI.Flow.Core` - workflow models, validation, execution, logging
-- `src/Powergentic.AI.Flow.Actions.Script` - local script runner
-- `src/Powergentic.AI.Flow.Actions.GitHubCopilot` - Copilot action runner and adapter
-- `tests/Powergentic.AI.Flow.Core.Tests` - unit tests
+- `src/Powergentic.Flow.Cli` - CLI entrypoint
+- `src/Powergentic.Flow.Core` - workflow models, validation, execution, logging
+- `src/Powergentic.Flow.Actions.Script` - local script runner
+- `src/Powergentic.Flow.Actions.GitHubCopilot` - Copilot action runner and adapter
+- `tests/Powergentic.Flow.Core.Tests` - unit tests

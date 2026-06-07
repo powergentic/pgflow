@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Powergentic.Flow.Actions.GitHubCopilot/Powergentic.Flow.Actions.GitHubCopilot.csproj" />
+    <Project Path="src/Powergentic.Flow.Actions.Script/Powergentic.Flow.Actions.Script.csproj" />
+    <Project Path="src/Powergentic.Flow.Cli/Powergentic.Flow.Cli.csproj" />
+    <Project Path="src/Powergentic.Flow.Core/Powergentic.Flow.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Powergentic.Flow.Core.Tests/Powergentic.Flow.Core.Tests.csproj" />
+  </Folder>
+</Solution>
