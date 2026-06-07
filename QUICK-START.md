@@ -17,16 +17,12 @@ This makes it easy to reuse one workflow across many projects.
 
 You need:
 
-- .NET SDK 10.0 or newer
+- a downloaded `pgflow` release build available on your machine
 - `bash` on macOS/Linux, or `pwsh` for PowerShell-based flows
 - GitHub Copilot access for workflows that use `githubCopilot`
 - optionally `GITHUB_TOKEN` if you want token-based auth
 
-If you are running from this repository, use:
-
-```bash
-dotnet build Powergentic.Flow.slnx
-```
+The examples below assume the `pgflow` executable is already installed and available on your `PATH`.
 
 ## 1. Create your first pgflow project
 
@@ -85,11 +81,11 @@ chmod +x my-first-flow/scripts/hello.sh
 
 ## 3. Validate and run it
 
-From the repository root:
+From anywhere you want to run the flow:
 
 ```bash
-dotnet run --project src/Powergentic.Flow.Cli -- validate my-first-flow
-dotnet run --project src/Powergentic.Flow.Cli -- run my-first-flow --display-enhanced
+pgflow validate my-first-flow
+pgflow run my-first-flow --display-enhanced
 ```
 
 What happens:
@@ -111,7 +107,7 @@ Useful flags while learning:
 After a run, inspect the latest log bundle:
 
 ```bash
-dotnet run --project src/Powergentic.Flow.Cli -- logs my-first-flow --latest
+pgflow logs my-first-flow --latest
 ```
 
 A run folder typically contains:
@@ -213,7 +209,7 @@ Please produce:
 Point the harness at another repository or working folder:
 
 ```bash
-dotnet run --project src/Powergentic.Flow.Cli -- run my-first-flow ../my-project --display-enhanced
+pgflow run my-first-flow ../my-project --display-enhanced
 ```
 
 In this run:
