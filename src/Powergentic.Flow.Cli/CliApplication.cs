@@ -767,7 +767,7 @@ public static class CliApplication
             return "pgflow v" + informationalVersion.Split('+', 2)[0];
         }
 
-        return "pgflow v" + (assembly.GetName().Version?.ToString() ?? "1.0.0");
+        return "pgflow v" + (assembly.GetName().Version?.ToString() ?? "?.?.?");
     }
 
     private static string GetCopyrightText()
