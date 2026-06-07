@@ -776,7 +776,7 @@ public static class CliApplication
                 " │                                                                              │",
                 $" │   {Colorize(AnsiYellow, "Powergentic Flow")}                                                           │",
                 $" │   {Colorize(AnsiGreen, "AI harness and orchestrator for running workflows built using")}              │",
-                $" │   {Colorize(AnsiGreen, "deterministic scripts and AI prompts")}.                                      │",
+                $" │   {Colorize(AnsiGreen, "deterministic scripts and AI prompts")}                                       │",
                 $" │                                                                              │",
                 $" │{PadBannerLine($"   {GetVersionText()}")}│",
                 $" │{PadBannerLine($"   {GetCopyrightText()}")}│",
