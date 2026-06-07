@@ -1432,12 +1432,55 @@ actions:
     }
 
     [Fact]
+    public async Task CliApplication_RunCommandFailsBeforeExecutionWhenCopilotActionExistsAndCopilotIsMissing()
+    {
+        var projectFolder = CreateProjectFolder("copilot-preflight-missing");
+        var targetWorkingDirectory = Path.Combine(projectFolder, "target");
+        Directory.CreateDirectory(targetWorkingDirectory);
+
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(projectFolder, "flow.yml"), """
+name: Copilot Missing Demo
+version: 1
+actions:
+  - id: implement
+    uses: githubCopilot
+    with:
+      prompt: hello
+""");
+
+            var previousPath = Environment.GetEnvironmentVariable("PATH");
+            Environment.SetEnvironmentVariable("PATH", string.Empty);
+            try
+            {
+                var (exitCode, stdout, stderr) = await InvokeConsoleAsync(() => CliApplication.RunAsync(["run", projectFolder, targetWorkingDirectory]));
+
+                Assert.Equal(2, exitCode);
+                Assert.Equal(string.Empty, stdout);
+                Assert.Contains("GitHub Copilot action requires the 'copilot' CLI", stderr, StringComparison.OrdinalIgnoreCase);
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("PATH", previousPath);
+            }
+        }
+        finally
+        {
+            Directory.Delete(projectFolder, recursive: true);
+        }
+    }
+
+    [Fact]
     public void ServiceCollectionExtensions_RegisterGitHubCopilotServices()
     {
         var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
 
         services.AddGitHubCopilotAction();
 
+        Assert.Contains(services, descriptor =>
+            descriptor.ServiceType == typeof(ICopilotInstallationProbe)
+            && descriptor.ImplementationType == typeof(CopilotInstallationProbe));
         Assert.Contains(services, descriptor =>
             descriptor.ServiceType == typeof(ICopilotClientAdapter)
             && descriptor.ImplementationType == typeof(CopilotClientAdapter));

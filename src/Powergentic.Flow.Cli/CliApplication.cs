@@ -12,6 +12,8 @@ namespace Powergentic.Flow.Cli;
 
 public static class CliApplication
 {
+    private static string FlowYamlFileName = "flow.yml"; //flow.yml filename
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true,
@@ -62,9 +64,17 @@ public static class CliApplication
         await using var provider = BuildServiceProvider(GetLogLevel(command));
         var executor = provider.GetRequiredService<IWorkflowExecutor>();
         var logger = provider.GetRequiredService<ILoggerFactory>().CreateLogger("Cli");
+        var loader = provider.GetRequiredService<IWorkflowLoader>();
+        var installationProbe = provider.GetRequiredService<ICopilotInstallationProbe>();
 
         try
         {
+            var workflow = await loader.LoadAsync(workflowFile, cancellationToken);
+            ApplyInputOverrides(workflow, command.InputOverrides);
+            ApplyVariableOverrides(workflow, command.VariableOverrides);
+            ApplyEnvironmentOverrides(workflow, command.EnvironmentOverrides);
+            EnsureGitHubCopilotInstalledIfRequired(workflow, installationProbe);
+
             var result = await executor.ExecuteAsync(
                 projectFolder,
                 targetWorkingDirectory,
@@ -88,6 +98,10 @@ public static class CliApplication
             }
 
             return result.Succeeded ? 0 : 3;
+        }
+        catch (CliUsageException ex)
+        {
+            return WriteError(command.Json, ex.Message);
         }
         catch (Exception ex)
         {
@@ -577,7 +591,7 @@ public static class CliApplication
 
     private static string ResolveWorkflowFile(string projectFolder, string? workflowFile)
     {
-        var file = string.IsNullOrWhiteSpace(workflowFile) ? "flow.yml" : workflowFile;
+        var file = string.IsNullOrWhiteSpace(workflowFile) ? FlowYamlFileName : workflowFile;
         return Path.IsPathRooted(file)
             ? file
             : Path.GetFullPath(Path.Combine(projectFolder, file));
@@ -629,7 +643,7 @@ public static class CliApplication
             "basic-script" =>
             [
                 new ScaffoldFile(
-                    "flow.yml",
+                    FlowYamlFileName,
                     "name: Basic Script Workflow\nversion: 1\nvariables:\n  greeting: Hello from Powergentic\nexecution:\n  maxTransitions: 5\n  maxVisitsPerAction: 2\nactions:\n  - id: hello\n    uses: script\n    with:\n      shell: bash\n      path: scripts/hello.sh\n      environment:\n        GREETING: ${ variables.greeting }\n    outputs:\n      message: ${ actions.hello.outputs.message }\n"),
                 new ScaffoldFile(
                     Path.Combine("scripts", "hello.sh"),
@@ -639,7 +653,7 @@ public static class CliApplication
             "script-and-copilot-loop" =>
             [
                 new ScaffoldFile(
-                    "flow.yml",
+                    FlowYamlFileName,
                     "name: Script And Copilot Loop\nversion: 1\nvariables:\n  needsReview: true\n  targetPath: ${ runtime.targetWorkingDirectory }\nexecution:\n  startAt: prepare\n  maxTransitions: 10\n  maxVisitsPerAction: 4\nactions:\n  - id: prepare\n    uses: script\n    with:\n      shell: bash\n      path: scripts/prepare.sh\n\n  - id: review\n    if: ${{ success() && variables.needsReview == true }}\n    uses: githubCopilot\n    with:\n      promptFile: prompts/review.prompt.md\n      inputs:\n        statusFile: ${ actions.prepare.outputs.statusFile }\n        targetPath: ${ runtime.targetWorkingDirectory }\n      writeResponseTo: output/review.txt\n    outputs:\n      responseFile: ${ actions.review.outputs.responseFile }\n    next:\n      - when: ${{ actions.review.outputs.responseFile == null }}\n        goto: prepare\n\n  - id: done\n    if: ${{ always() }}\n    uses: script\n    with:\n      shell: bash\n      run: echo \"done=true\" >> \"$ORCHESTRATOR_OUTPUT\"\n"),
                 new ScaffoldFile(
                     Path.Combine("scripts", "prepare.sh"),
@@ -654,6 +668,21 @@ public static class CliApplication
 
     private static void WriteJson<T>(T value)
         => Console.WriteLine(JsonSerializer.Serialize(value, JsonOptions));
+
+    private static void EnsureGitHubCopilotInstalledIfRequired(WorkflowDefinition workflow, ICopilotInstallationProbe installationProbe)
+    {
+        if (!workflow.Actions.Any(action => string.Equals(action.Uses, "githubCopilot", StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
+        if (installationProbe.IsInstalled())
+        {
+            return;
+        }
+
+        throw new CliUsageException("GitHub Copilot action requires the 'copilot' CLI, but it is not installed or not available on PATH.");
+    }
 
     private static int WriteError(bool json, string message)
     {
