@@ -16,6 +16,83 @@ namespace Powergentic.Flow.Core.Tests;
 public sealed class AdditionalCoverageTests
 {
     [Fact]
+    public void CopilotInstallationProbe_ReturnsTrueWhenVersionIsReportedOnStandardOutput()
+    {
+        var probe = new CopilotInstallationProbe(() => (true, "GitHub Copilot CLI 1.0.60.\nRun 'copilot update' to check for updates.", string.Empty));
+
+        Assert.True(probe.IsInstalled());
+    }
+
+    [Fact]
+    public void CopilotInstallationProbe_ReturnsTrueWhenVersionIsReportedOnStandardError()
+    {
+        var probe = new CopilotInstallationProbe(() => (true, string.Empty, "GitHub Copilot CLI 1.0.60."));
+
+        Assert.True(probe.IsInstalled());
+    }
+
+    [Fact]
+    public void CopilotInstallationProbe_ReturnsTrueWhenVersionIsCapturedBeforeProcessExits()
+    {
+        var probe = new CopilotInstallationProbe(() => (false, "GitHub Copilot CLI 1.0.60.", string.Empty));
+
+        Assert.True(probe.IsInstalled());
+    }
+
+    [Fact]
+    public void CopilotInstallationProbe_ReturnsFalseWhenProcessDoesNotExitAndNoVersionIsCaptured()
+    {
+        var probe = new CopilotInstallationProbe(() => (false, "Install GitHub Copilot CLI? ['y/N']", string.Empty));
+
+        Assert.False(probe.IsInstalled());
+    }
+
+    [Fact]
+    public void CopilotInstallationProbe_ReturnsFalseWhenVersionCommandThrows()
+    {
+        var probe = new CopilotInstallationProbe(() => throw new InvalidOperationException("boom"));
+
+        Assert.False(probe.IsInstalled());
+    }
+
+    [Fact]
+    public async Task RunLogWriter_WriteActionLogAsync_RecreatesMissingActionsDirectory()
+    {
+        var projectFolder = CreateProjectFolder("run-log-writer-action-dir");
+        var runLogWriter = new RunLogWriter();
+        var workflowFilePath = Path.Combine(projectFolder, "flow.yml");
+        await File.WriteAllTextAsync(workflowFilePath, "name: demo\nversion: 1\nactions: []\n");
+
+        try
+        {
+            var paths = runLogWriter.CreatePaths(projectFolder, workflowFilePath, "run-1");
+            Directory.Delete(paths.ActionsFolder, recursive: true);
+
+            var actionFilePath = Path.Combine(paths.ActionsFolder, "01-demo.json");
+            await runLogWriter.WriteActionLogAsync(new ActionLogData
+            {
+                ActionId = "demo",
+                ActionName = "Demo",
+                ActionType = "script",
+                Inputs = new Dictionary<string, object?>(),
+                Result = new ActionResult
+                {
+                    ActionId = "demo",
+                    Status = ActionExecutionStatus.Succeeded,
+                    StartedAt = DateTimeOffset.UtcNow,
+                    CompletedAt = DateTimeOffset.UtcNow,
+                }
+            }, actionFilePath, CancellationToken.None);
+
+            Assert.True(File.Exists(actionFilePath));
+        }
+        finally
+        {
+            Directory.Delete(projectFolder, recursive: true);
+        }
+    }
+
+    [Fact]
     public void ActionExecutionContext_GetStringMap_HandlesObjectMapStringMapAndMissingValue()
     {
         var context = CreateActionContext(new Dictionary<string, object?>
