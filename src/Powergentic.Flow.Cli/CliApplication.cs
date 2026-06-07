@@ -781,6 +781,7 @@ public static class CliApplication
                 $" │{PadBannerLine($"   {GetVersionText()}")}│",
                 $" │{PadBannerLine($"   {GetCopyrightText()}")}│",
                 $" │{PadBannerLine("   https://powergentic.ai")}│",
+                $" │{PadBannerLine("   MIT License")}│",
                 " │                                                                              │",
                 " ╰──────────────────────────────────────────────────────────────────────────────╯",
                 string.Empty,
