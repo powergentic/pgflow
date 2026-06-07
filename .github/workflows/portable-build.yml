@@ -1,0 +1,62 @@
+name: Portable Builds
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  publish-portable:
+    name: Publish ${{ matrix.artifact_name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            runtime: win-x64
+            artifact_name: pgflow-win-x64
+            executable_name: pgflow.exe
+          - os: macos-latest
+            runtime: osx-x64
+            artifact_name: pgflow-osx-x64
+            executable_name: pgflow
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore solution
+        run: dotnet restore Powergentic.Flow.slnx
+
+      - name: Publish single-file executable
+        run: >-
+          dotnet publish src/Powergentic.Flow.Cli/Powergentic.Flow.Cli.csproj
+          --configuration Release
+          --runtime ${{ matrix.runtime }}
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:EnableCompressionInSingleFile=true
+          -p:PublishTrimmed=false
+          -p:DebugType=None
+          -p:DebugSymbols=false
+          -p:ContinuousIntegrationBuild=true
+          --output artifacts/${{ matrix.artifact_name }}
+
+      - name: Verify published executable exists
+        shell: bash
+        run: |
+          test -f "artifacts/${{ matrix.artifact_name }}/${{ matrix.executable_name }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: artifacts/${{ matrix.artifact_name }}/
+          if-no-files-found: error
+          retention-days: 14
