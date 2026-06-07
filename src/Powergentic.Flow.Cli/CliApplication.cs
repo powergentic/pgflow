@@ -748,29 +748,44 @@ public static class CliApplication
     private static string GetCopyrightText()
         => $"Copyright © {DateTime.UtcNow.Year} Build5Nines LLC";
 
-    private static string GetBannerText()
-        => $$"""
+    private const string AnsiReset = "\u001b[0m";
+    private const string AnsiYellow = "\u001b[33m";
+    private const string AnsiGreen = "\u001b[32m";
+    private const int BannerContentWidth = 78;
 
- ╭──────────────────────────────────────────────────────────────────────────────╮
- │                                                                              │
- │   Powergentic                                                                │
- │                                                                              │
- │   ██████╗   ██████╗ ███████╗██╗      ██████╗ ██╗    ██╗                      │
- │   ██╔══██╗ ██╔════╝ ██╔════╝██║     ██╔═══██╗██║    ██║                      │
- │   ██████╔╝ ██║  ███╗█████╗  ██║     ██║   ██║██║ █╗ ██║                      │
- │   ██╔═══╝  ██║   ██║██╔══╝  ██║     ██║   ██║██║███╗██║                      │
- │   ██║      ╚██████╔╝██║     ███████╗╚██████╔╝╚███╔███╔╝                      │
- │   ╚═╝       ╚═════╝ ╚═╝     ╚══════╝ ╚═════╝  ╚══╝╚══╝                       │
- │                                                                              │
- │   {{GetVersionText(),-74}} │
- │                                                                              │
- │   https://powergentic.ai                                                     │
- │                                                                              │
- │   {{GetCopyrightText(),-74}} │
- │                                                                              │
- ╰──────────────────────────────────────────────────────────────────────────────╯
- 
-""";
+    private static string GetBannerText()
+    {
+        static string PadBannerLine(string text)
+            => text.Length >= BannerContentWidth ? text[..BannerContentWidth] : text.PadRight(BannerContentWidth);
+
+        static string Colorize(string color, string text)
+            => $"{color}{text}{AnsiReset}";
+
+        return string.Join(
+            Environment.NewLine,
+            [
+                string.Empty,
+                " ╭──────────────────────────────────────────────────────────────────────────────╮",
+                " │                                                                              │",
+                " │   ██████╗   ██████╗ ███████╗██╗      ██████╗ ██╗    ██╗                      │",
+                " │   ██╔══██╗ ██╔════╝ ██╔════╝██║     ██╔═══██╗██║    ██║                      │",
+                " │   ██████╔╝ ██║  ███╗█████╗  ██║     ██║   ██║██║ █╗ ██║                      │",
+                " │   ██╔═══╝  ██║   ██║██╔══╝  ██║     ██║   ██║██║███╗██║                      │",
+                " │   ██║      ╚██████╔╝██║     ███████╗╚██████╔╝╚███╔███╔╝                      │",
+                " │   ╚═╝       ╚═════╝ ╚═╝     ╚══════╝ ╚═════╝  ╚══╝╚══╝                       │",
+                " │                                                                              │",
+                $" │   {Colorize(AnsiYellow, "Powergentic Flow")}                                                           │",
+                $" │   {Colorize(AnsiGreen, "AI harness and orchestrator for running workflows built using")}              │",
+                $" │   {Colorize(AnsiGreen, "deterministic scripts and AI prompts")}.                                      │",
+                $" │                                                                              │",
+                $" │{PadBannerLine($"   {GetVersionText()}")}│",
+                $" │{PadBannerLine($"   {GetCopyrightText()}")}│",
+                $" │{PadBannerLine("   https://powergentic.ai")}│",
+                " │                                                                              │",
+                " ╰──────────────────────────────────────────────────────────────────────────────╯",
+                string.Empty,
+            ]);
+    }
 
     private static string GetHelpText()
         => """
