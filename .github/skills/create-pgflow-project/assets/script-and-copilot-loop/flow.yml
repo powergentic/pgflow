@@ -1,0 +1,36 @@
+name: Script And Copilot Loop
+version: 1
+variables:
+  needsReview: true
+  targetPath: ${ runtime.targetWorkingDirectory }
+execution:
+  maxTransitions: 10
+  maxVisitsPerAction: 4
+actions:
+  - id: prepare
+    uses: script
+    with:
+      shell: bash
+      path: scripts/prepare.sh
+
+  - id: review
+    if: ${{ success() && variables.needsReview == true }}
+    uses: githubCopilot
+    with:
+      promptFile: prompts/review.prompt.md
+      inputs:
+        statusFile: ${ actions.prepare.outputs.statusFile }
+        targetPath: ${ runtime.targetWorkingDirectory }
+      writeResponseTo: output/review.txt
+    outputs:
+      responseFile: ${ actions.review.outputs.responseFile }
+    next:
+      - when: ${{ actions.review.outputs.responseFile == null }}
+        goto: prepare
+
+  - id: done
+    if: ${{ always() }}
+    uses: script
+    with:
+      shell: bash
+      run: echo "done=true" >> "$ORCHESTRATOR_OUTPUT"
