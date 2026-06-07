@@ -11,5 +11,6 @@ public interface IWorkflowExecutor
         IReadOnlyDictionary<string, object?>? inputOverrides = null,
         IReadOnlyDictionary<string, object?>? variableOverrides = null,
         IReadOnlyDictionary<string, string?>? environmentOverrides = null,
+        IWorkflowExecutionObserver? observer = null,
         CancellationToken cancellationToken = default);
 }

@@ -24,6 +24,7 @@ public sealed class RunLogWriter
             LogsFolder = logsFolder,
             RunFolder = runFolder,
             ActionsFolder = actionsFolder,
+            ConsoleLogFile = Path.Combine(runFolder, "console.log"),
         };
     }
 

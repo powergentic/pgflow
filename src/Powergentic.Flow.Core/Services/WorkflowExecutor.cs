@@ -20,6 +20,7 @@ public sealed class WorkflowExecutor(
         IReadOnlyDictionary<string, object?>? inputOverrides = null,
         IReadOnlyDictionary<string, object?>? variableOverrides = null,
         IReadOnlyDictionary<string, string?>? environmentOverrides = null,
+        IWorkflowExecutionObserver? observer = null,
         CancellationToken cancellationToken = default)
     {
         var workflow = await loader.LoadAsync(workflowFilePath, cancellationToken);
@@ -82,6 +83,19 @@ public sealed class WorkflowExecutor(
         };
         var publishedEntries = new List<WorkflowPublishedEntry>();
 
+        observer?.OnRunStarted(new WorkflowExecutionStartedEvent
+        {
+            RunId = runId,
+            WorkflowName = workflow.Name,
+            ProjectFolder = projectFolder,
+            TargetWorkingDirectory = targetWorkingDirectory,
+            WorkflowFilePath = workflowFilePath,
+            LogFolder = paths.RunFolder,
+            StartedAt = startedAt,
+            MaxTransitions = workflow.Execution.MaxTransitions,
+            MaxVisitsPerAction = workflow.Execution.MaxVisitsPerAction,
+        });
+
         await logWriter.WriteResolvedWorkflowAsync(paths, workflow, cancellationToken);
 
         var actionsById = workflow.Actions.ToDictionary(a => a.Id, StringComparer.OrdinalIgnoreCase);
@@ -109,6 +123,25 @@ public sealed class WorkflowExecutor(
                 throw new InvalidOperationException($"Action '{action.Id}' exceeded maxVisitsPerAction of {workflow.Execution.MaxVisitsPerAction}.");
             }
 
+            var actionStartedAt = DateTimeOffset.UtcNow;
+            context.CurrentActionStartedAt = actionStartedAt;
+            observer?.OnActionStarted(new WorkflowActionStartedEvent
+            {
+                RunId = context.RunId,
+                WorkflowName = workflow.Name,
+                ActionId = action.Id,
+                ActionName = action.Name ?? action.Id,
+                ActionType = action.Uses,
+                FlowStartedAt = context.StartedAt,
+                ActionStartedAt = actionStartedAt,
+                TransitionCount = context.TransitionCount,
+                MaxTransitions = workflow.Execution.MaxTransitions,
+                VisitCount = context.ActionVisitCounts[action.Id],
+                MaxVisitsPerAction = workflow.Execution.MaxVisitsPerAction,
+                TargetWorkingDirectory = context.TargetWorkingDirectory,
+                LogFolder = context.LogFolder,
+            });
+
             var shouldRun = expressions.EvaluateCondition(action.If, context);
             ActionResult result;
             if (!shouldRun)
@@ -118,7 +151,7 @@ public sealed class WorkflowExecutor(
                     ActionId = action.Id,
                     Status = ActionExecutionStatus.Skipped,
                     Summary = "Action skipped by condition.",
-                    StartedAt = DateTimeOffset.UtcNow,
+                    StartedAt = actionStartedAt,
                     CompletedAt = DateTimeOffset.UtcNow,
                 };
             }
@@ -143,9 +176,28 @@ public sealed class WorkflowExecutor(
 
                 logger.LogInformation("Running action '{ActionId}' ({ActionType})", action.Id, action.Uses);
                 result = await runner.RunAsync(actionContext, cancellationToken);
-                result.StartedAt = result.StartedAt == default ? DateTimeOffset.UtcNow : result.StartedAt;
+                result.StartedAt = result.StartedAt == default ? actionStartedAt : result.StartedAt;
                 result.CompletedAt = result.CompletedAt == default ? DateTimeOffset.UtcNow : result.CompletedAt;
             }
+
+            observer?.OnActionCompleted(new WorkflowActionCompletedEvent
+            {
+                RunId = context.RunId,
+                WorkflowName = workflow.Name,
+                ActionId = action.Id,
+                ActionName = action.Name ?? action.Id,
+                ActionType = action.Uses,
+                Status = result.Status,
+                Summary = string.IsNullOrWhiteSpace(result.Summary) ? result.Status.ToString() : result.Summary,
+                FlowStartedAt = context.StartedAt,
+                ActionStartedAt = result.StartedAt,
+                ActionCompletedAt = result.CompletedAt,
+                TransitionCount = context.TransitionCount,
+                MaxTransitions = workflow.Execution.MaxTransitions,
+                VisitCount = context.ActionVisitCounts[action.Id],
+                MaxVisitsPerAction = workflow.Execution.MaxVisitsPerAction,
+                ExitCode = result.ExitCode,
+            });
 
             context.ActionResults[action.Id] = result;
 
@@ -159,7 +211,10 @@ public sealed class WorkflowExecutor(
 
             var actionPublishedEntries = CreatePublishedEntries(action, context);
             publishedEntries.AddRange(actionPublishedEntries);
-            WritePublishedConsoleEntries(actionPublishedEntries);
+            foreach (var entry in actionPublishedEntries)
+            {
+                observer?.OnPublishedEntry(entry);
+            }
 
             var actionLogPath = Path.Combine(paths.ActionsFolder, $"{workflow.Actions.FindIndex(a => a.Id == action.Id) + 1:00}-{action.Id}.json");
             await logWriter.WriteActionLogAsync(new ActionLogData
@@ -171,6 +226,7 @@ public sealed class WorkflowExecutor(
                 Result = result,
             }, actionLogPath, cancellationToken);
 
+            context.CurrentActionStartedAt = null;
             if (result.Status == ActionExecutionStatus.Failed)
             {
                 break;
@@ -180,6 +236,8 @@ public sealed class WorkflowExecutor(
         }
 
         context.CompletedAt = DateTimeOffset.UtcNow;
+        var orderedActionResults = context.ActionResults.Values.OrderBy(r => workflow.Actions.FindIndex(a => a.Id == r.ActionId)).ToList();
+        var consoleLogFile = paths.ConsoleLogFile;
         var runResult = new WorkflowRunResult
         {
             RunId = context.RunId,
@@ -187,13 +245,29 @@ public sealed class WorkflowExecutor(
             ProjectFolder = context.ProjectFolder,
             TargetWorkingDirectory = context.TargetWorkingDirectory,
             LogFolder = paths.RunFolder,
+            ConsoleLogFile = consoleLogFile,
             StartedAt = context.StartedAt,
             CompletedAt = context.CompletedAt.Value,
             TransitionCount = context.TransitionCount,
             PublishedEntries = publishedEntries,
-            ActionResults = context.ActionResults.Values.OrderBy(r => workflow.Actions.FindIndex(a => a.Id == r.ActionId)).ToList(),
-            Succeeded = context.ActionResults.Values.All(r => r.Status != ActionExecutionStatus.Failed),
+            ActionResults = orderedActionResults,
+            Succeeded = orderedActionResults.All(r => r.Status != ActionExecutionStatus.Failed),
         };
+
+        observer?.OnRunCompleted(new WorkflowRunCompletedEvent
+        {
+            RunId = context.RunId,
+            WorkflowName = workflow.Name,
+            StartedAt = context.StartedAt,
+            CompletedAt = context.CompletedAt.Value,
+            Succeeded = runResult.Succeeded,
+            TransitionCount = context.TransitionCount,
+            TotalActions = orderedActionResults.Count,
+            SucceededActions = orderedActionResults.Count(r => r.Status == ActionExecutionStatus.Succeeded),
+            FailedActions = orderedActionResults.Count(r => r.Status == ActionExecutionStatus.Failed),
+            SkippedActions = orderedActionResults.Count(r => r.Status == ActionExecutionStatus.Skipped),
+            LogFolder = paths.RunFolder,
+        });
 
         await logWriter.WriteRunSummaryAsync(runResult, Path.Combine(paths.RunFolder, "run.json"), cancellationToken);
         return runResult;
@@ -277,16 +351,6 @@ public sealed class WorkflowExecutor(
         }
 
         return entries;
-    }
-
-    private static void WritePublishedConsoleEntries(IEnumerable<WorkflowPublishedEntry> entries)
-    {
-        foreach (var entry in entries.Where(entry => entry.To.Contains("console", StringComparer.OrdinalIgnoreCase)))
-        {
-            Console.WriteLine($"===== {entry.Title} =====");
-            Console.WriteLine(entry.Content);
-            Console.WriteLine();
-        }
     }
 
     private string? ResolveNextActionId(WorkflowDefinition workflow, WorkflowActionDefinition action, ExecutionContextModel context)

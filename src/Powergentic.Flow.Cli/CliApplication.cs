@@ -7,6 +7,7 @@ using Powergentic.Flow.Actions.Script;
 using Powergentic.Flow.Core;
 using Powergentic.Flow.Core.Abstractions;
 using Powergentic.Flow.Core.Models;
+using Powergentic.Flow.Core.Services;
 
 namespace Powergentic.Flow.Cli;
 
@@ -58,11 +59,13 @@ public static class CliApplication
         var projectFolder = ResolveProjectFolder(command.ProjectFolder);
         var targetWorkingDirectory = ResolveTargetWorkingDirectory(command.TargetWorkingDirectory);
         var workflowFile = ResolveWorkflowFile(projectFolder, command.WorkflowFile);
+        var displayOptions = ConsoleDisplayOptions.Create(command.DisplayEnhanced && !command.Json);
+        var displayConsole = command.Json ? null : new WorkflowExecutionConsole(displayOptions);
 
-        WriteProgress(command.Json, "Starting flow execution...");
-        WriteProgress(command.Json, $"Project folder: {projectFolder}");
-        WriteProgress(command.Json, $"Target working directory: {targetWorkingDirectory}");
-        WriteProgress(command.Json, $"Flow file: {workflowFile}");
+        displayConsole?.WriteProgress("Starting flow execution...");
+        displayConsole?.WriteProgress($"Project folder: {projectFolder}");
+        displayConsole?.WriteProgress($"Target working directory: {targetWorkingDirectory}");
+        displayConsole?.WriteProgress($"Flow file: {workflowFile}");
 
         EnsureProjectExists(projectFolder);
         EnsureProjectExists(targetWorkingDirectory, "Target working directory");
@@ -70,30 +73,46 @@ public static class CliApplication
 
         if (command.DryRun)
         {
-            WriteProgress(command.Json, "Dry run requested. Switching to validation mode.");
+            displayConsole?.WriteProgress("Dry run requested. Switching to validation mode.");
             return await ValidateWorkflowAsync(command with { Name = "validate" }, cancellationToken);
         }
 
-        await using var provider = BuildServiceProvider(GetLogLevel(command));
+        await using var provider = BuildServiceProvider(GetLogLevel(command), displayOptions, displayConsole);
         var executor = provider.GetRequiredService<IWorkflowExecutor>();
         var logger = provider.GetRequiredService<ILoggerFactory>().CreateLogger("Cli");
         var loader = provider.GetRequiredService<IWorkflowLoader>();
         var installationProbe = provider.GetRequiredService<ICopilotInstallationProbe>();
+        var executionConsole = displayConsole ?? provider.GetRequiredService<WorkflowExecutionConsole>();
+        var observer = command.Json ? null : new WorkflowExecutionObserver(executionConsole);
 
         try
         {
-            WriteProgress(command.Json, "Loading flow definition...");
+            if (!command.Json)
+            {
+                executionConsole.WriteProgress("Loading flow definition...");
+            }
+
             var workflow = await loader.LoadAsync(workflowFile, cancellationToken);
-            WriteProgress(command.Json, $"Loaded flow '{workflow.Name}'. Applying overrides...");
+            if (!command.Json)
+            {
+                executionConsole.WriteProgress($"Loaded flow '{workflow.Name}'. Applying overrides...");
+            }
+
             ApplyInputOverrides(workflow, command.InputOverrides);
             ApplyVariableOverrides(workflow, command.VariableOverrides);
             ApplyEnvironmentOverrides(workflow, command.EnvironmentOverrides);
 
-            WriteProgress(command.Json, "Checking prerequisites...");
+            if (!command.Json)
+            {
+                executionConsole.WriteProgress("Checking prerequisites...");
+            }
 
-            EnsureGitHubCopilotInstalledIfRequired(workflow, installationProbe);
+            EnsureGitHubCopilotInstalledIfRequired(workflow, installationProbe, command.Json ? null : executionConsole);
 
-            WriteProgress(command.Json, "Executing flow actions...");
+            if (!command.Json)
+            {
+                executionConsole.WriteProgress("Executing flow actions...");
+            }
 
             var result = await executor.ExecuteAsync(
                 projectFolder,
@@ -102,6 +121,7 @@ public static class CliApplication
                 command.InputOverrides,
                 command.VariableOverrides,
                 command.EnvironmentOverrides,
+                observer,
                 cancellationToken);
             if (command.Json)
             {
@@ -109,6 +129,7 @@ public static class CliApplication
             }
             else
             {
+                executionConsole.WriteSuccess($"Workflow '{result.WorkflowName}' finished. Success={result.Succeeded}. Logs={result.LogFolder}");
                 logger.LogInformation(
                     "Workflow {WorkflowName} finished. Success={Success}. Target={TargetWorkingDirectory}. Logs={LogFolder}",
                     result.WorkflowName,
@@ -121,7 +142,7 @@ public static class CliApplication
         }
         catch (CliUsageException ex)
         {
-            return WriteError(command.Json, ex.Message);
+            return WriteError(command.Json, ex.Message, executionConsole);
         }
         catch (Exception ex)
         {
@@ -139,10 +160,18 @@ public static class CliApplication
             }
             else
             {
+                executionConsole.WriteError($"Workflow execution failed: {ex.Message}");
                 logger.LogError(ex, "Workflow execution failed.");
             }
 
             return 10;
+        }
+        finally
+        {
+            if (!command.Json)
+            {
+                executionConsole.StopTranscript();
+            }
         }
     }
 
@@ -328,6 +357,10 @@ public static class CliApplication
             Console.WriteLine($"Duration:     {(run.CompletedAt - run.StartedAt).TotalSeconds:F2}s");
             Console.WriteLine($"Transitions:  {run.TransitionCount}");
             Console.WriteLine($"Logs:         {run.LogFolder}");
+            if (!string.IsNullOrWhiteSpace(run.ConsoleLogFile))
+            {
+                Console.WriteLine($"Console Log:  {run.ConsoleLogFile}");
+            }
 
             if (run.PublishedEntries.Count > 0)
             {
@@ -350,9 +383,15 @@ public static class CliApplication
         return 0;
     }
 
-    private static ServiceProvider BuildServiceProvider(LogLevel minimumLevel)
+    private static ServiceProvider BuildServiceProvider(LogLevel minimumLevel, WorkflowExecutionDisplayOptions? displayOptions = null, WorkflowExecutionConsole? executionConsole = null)
     {
         var services = new ServiceCollection();
+        var resolvedDisplayOptions = displayOptions ?? ConsoleDisplayOptions.Create(false);
+        var resolvedExecutionConsole = executionConsole ?? new WorkflowExecutionConsole(resolvedDisplayOptions);
+
+        services.AddFlowCore();
+        services.AddSingleton(resolvedDisplayOptions);
+        services.AddSingleton(resolvedExecutionConsole);
         services.AddLogging(builder =>
         {
             builder.AddSimpleConsole(options =>
@@ -360,9 +399,9 @@ public static class CliApplication
                 options.SingleLine = true;
                 options.TimestampFormat = "HH:mm:ss ";
             });
+            builder.AddProvider(new WorkflowExecutionTranscriptLoggerProvider(resolvedExecutionConsole));
             builder.SetMinimumLevel(minimumLevel);
         });
-        services.AddFlowCore();
         services.AddScriptAction();
         services.AddGitHubCopilotAction();
         return services.BuildServiceProvider();
@@ -407,6 +446,7 @@ public static class CliApplication
         var verbose = false;
         var json = false;
         var force = false;
+        var displayEnhanced = false;
         var template = "basic-script";
         var inputOverrides = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
         var variableOverrides = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
@@ -465,6 +505,9 @@ public static class CliApplication
                 case "--force":
                     force = true;
                     break;
+                case "--display-enhanced":
+                    displayEnhanced = true;
+                    break;
                 case "--latest":
                     break;
                 case "--run-id":
@@ -502,7 +545,7 @@ public static class CliApplication
             workflowFile = positionals[1];
         }
 
-        return new ParsedCommand(commandName, projectFolder, targetWorkingDirectory, workflowFile, dryRun, verbose, json, force, template, runId, inputOverrides, variableOverrides, environmentOverrides);
+        return new ParsedCommand(commandName, projectFolder, targetWorkingDirectory, workflowFile, dryRun, verbose, json, force, displayEnhanced, template, runId, inputOverrides, variableOverrides, environmentOverrides);
     }
 
     private static string ReadRequiredValue(string[] args, ref int index, string optionName)
@@ -581,6 +624,7 @@ public static class CliApplication
             false,
             false,
             false,
+            false,
             "basic-script",
             null,
             new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase),
@@ -593,6 +637,7 @@ public static class CliApplication
             null,
             null,
             null,
+            false,
             false,
             false,
             false,
@@ -689,30 +734,33 @@ public static class CliApplication
     private static void WriteJson<T>(T value)
         => Console.WriteLine(JsonSerializer.Serialize(value, JsonOptions));
 
-    private static void EnsureGitHubCopilotInstalledIfRequired(WorkflowDefinition workflow, ICopilotInstallationProbe installationProbe)
+    private static void EnsureGitHubCopilotInstalledIfRequired(WorkflowDefinition workflow, ICopilotInstallationProbe installationProbe, WorkflowExecutionConsole? executionConsole = null)
     {
-        // if flow uses githubCopilot, then write checking GitHub Copilot installed and run check
         var usesGitHubCopilot = workflow.Actions.Any(action => string.Equals(action.Uses, "githubCopilot", StringComparison.OrdinalIgnoreCase));
         if (!usesGitHubCopilot)
         {
             return;
         }
 
-        WriteProgress(false, "Checking if GitHub Copilot CLI is installed...");
+        executionConsole?.WriteProgress("Checking if GitHub Copilot CLI is installed...");
         if (installationProbe.IsInstalled())
         {
-            WriteSuccess("GitHub Copilot CLI is installed.");
+            executionConsole?.WriteSuccess("GitHub Copilot CLI is installed.");
             return;
         }
 
         throw new CliUsageException("GitHub Copilot action requires the GitHub Copilot CLI, but it is not installed or not available on PATH.");
     }
 
-    private static int WriteError(bool json, string message)
+    private static int WriteError(bool json, string message, WorkflowExecutionConsole? executionConsole = null)
     {
         if (json)
         {
             WriteJson(new { succeeded = false, error = message });
+        }
+        else if (executionConsole is not null)
+        {
+            executionConsole.WriteError(message);
         }
         else
         {
@@ -843,6 +891,7 @@ Options:
   --run-id <id>                 Specific run id for the logs command.
   --latest                      Show the latest run summary (default for logs).
   --force                       Allow init in a non-empty target folder.
+  --display-enhanced            Show a live execution dashboard in interactive terminals.
   --verbose                     Enable verbose console logging.
   --json                        Emit JSON output.
 
@@ -865,6 +914,7 @@ Examples:
         bool Verbose,
         bool Json,
         bool Force,
+        bool DisplayEnhanced,
         string Template,
         string? RunId,
         IReadOnlyDictionary<string, object?> InputOverrides,

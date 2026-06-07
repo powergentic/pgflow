@@ -28,6 +28,7 @@ public sealed class CliApplicationTests
         Assert.Contains($"Copyright © {DateTime.UtcNow.Year} Build5Nines LLC", stdout, StringComparison.Ordinal);
         Assert.Contains("Examples:", stdout, StringComparison.Ordinal);
         Assert.Contains("--workdir <path>", stdout, StringComparison.Ordinal);
+        Assert.Contains("--display-enhanced", stdout, StringComparison.Ordinal);
         Assert.Equal(string.Empty, stderr);
     }
 

@@ -10,6 +10,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddSingleton<ExpressionEngine>();
         services.AddSingleton<RunLogWriter>();
+        services.AddSingleton<WorkflowExecutionConsole>();
         services.AddSingleton<IWorkflowLoader, WorkflowLoader>();
         services.AddSingleton<IWorkflowValidator, WorkflowValidator>();
         services.AddSingleton<IWorkflowExecutor, WorkflowExecutor>();

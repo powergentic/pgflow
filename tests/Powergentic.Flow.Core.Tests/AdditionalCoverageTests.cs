@@ -940,6 +940,16 @@ actions:
 
             Assert.Equal(0, exitCode);
             Assert.Contains("Text Run Demo", stdout + stderr, StringComparison.Ordinal);
+
+            var latestRunFolder = Directory.GetDirectories(Path.Combine(projectFolder, "logs"))
+                .OrderByDescending(path => path, StringComparer.OrdinalIgnoreCase)
+                .First();
+            var consoleLogFile = Path.Combine(latestRunFolder, "console.log");
+            var runSummaryText = await File.ReadAllTextAsync(Path.Combine(latestRunFolder, "run.json"));
+
+            Assert.True(File.Exists(consoleLogFile));
+            Assert.Contains("Workflow 'Text Run Demo' finished", await File.ReadAllTextAsync(consoleLogFile), StringComparison.Ordinal);
+            Assert.Contains("consoleLogFile", runSummaryText, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -1167,11 +1177,19 @@ actions:
             "--template=script-and-copilot-loop",
             "--force"
         }]);
+        var run = InvokePrivateStatic(typeof(CliApplication), "ParseCommand", [new[]
+        {
+            "run",
+            "project",
+            "target",
+            "--display-enhanced"
+        }]);
 
         Assert.Equal("workflow.yml", GetProperty<string>(validate, "WorkflowFile"));
         Assert.Equal("run-42", GetProperty<string>(logs, "RunId"));
         Assert.Equal("script-and-copilot-loop", GetProperty<string>(init, "Template"));
         Assert.True(GetProperty<bool>(init, "Force"));
+        Assert.True(GetProperty<bool>(run, "DisplayEnhanced"));
     }
 
     [Fact]

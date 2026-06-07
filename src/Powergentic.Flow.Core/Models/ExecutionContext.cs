@@ -17,6 +17,7 @@ public sealed class ExecutionContext
     public DateTimeOffset? CompletedAt { get; set; }
     public int TransitionCount { get; set; }
     public string? CurrentActionId { get; set; }
+    public DateTimeOffset? CurrentActionStartedAt { get; set; }
 
     public ActionResult? GetActionResult(string actionId)
         => ActionResults.TryGetValue(actionId, out var result) ? result : null;
