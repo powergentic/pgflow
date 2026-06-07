@@ -141,7 +141,7 @@ public sealed class WorkflowExecutor(
                     Logger = logger,
                 };
 
-                logger.LogInformation("Running action {ActionId} ({ActionType})", action.Id, action.Uses);
+                logger.LogInformation("Running action \"{ActionId}\" ({ActionType})", action.Id, action.Uses);
                 result = await runner.RunAsync(actionContext, cancellationToken);
                 result.StartedAt = result.StartedAt == default ? DateTimeOffset.UtcNow : result.StartedAt;
                 result.CompletedAt = result.CompletedAt == default ? DateTimeOffset.UtcNow : result.CompletedAt;
