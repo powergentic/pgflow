@@ -14,7 +14,7 @@ Required implementation constraints:
 - The app must support adding, editing, completing, filtering, and deleting TODO items.
 - Implement the UI with MVC controllers, Razor views, view models where helpful, and standard form posts.
 - Include automated unit tests for the core application logic.
-- The workflow will require at least {{minimumCoverage}}% unit test code coverage.
+- The workflow will require at least {{minimumCodeCoveragePercent}}% unit test code coverage.
 - Prefer clean, maintainable project structure and clear README/comments only when useful.
 
 Current workspace assessment file:
