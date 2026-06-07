@@ -55,17 +55,22 @@ public static class CliApplication
 
     private static async Task<int> RunWorkflowAsync(ParsedCommand command, CancellationToken cancellationToken)
     {
-        Console.WriteLine("Starting flow execution...");
-        
         var projectFolder = ResolveProjectFolder(command.ProjectFolder);
         var targetWorkingDirectory = ResolveTargetWorkingDirectory(command.TargetWorkingDirectory);
         var workflowFile = ResolveWorkflowFile(projectFolder, command.WorkflowFile);
+
+        WriteProgress(command.Json, "Starting flow execution...");
+        WriteProgress(command.Json, $"Project folder: {projectFolder}");
+        WriteProgress(command.Json, $"Target working directory: {targetWorkingDirectory}");
+        WriteProgress(command.Json, $"Flow file: {workflowFile}");
+
         EnsureProjectExists(projectFolder);
         EnsureProjectExists(targetWorkingDirectory, "Target working directory");
         EnsureWorkflowExists(workflowFile);
 
         if (command.DryRun)
         {
+            WriteProgress(command.Json, "Dry run requested. Switching to validation mode.");
             return await ValidateWorkflowAsync(command with { Name = "validate" }, cancellationToken);
         }
 
@@ -77,11 +82,18 @@ public static class CliApplication
 
         try
         {
+            WriteProgress(command.Json, "Loading flow definition...");
             var workflow = await loader.LoadAsync(workflowFile, cancellationToken);
+            WriteProgress(command.Json, $"Loaded flow '{workflow.Name}'. Applying overrides...");
             ApplyInputOverrides(workflow, command.InputOverrides);
             ApplyVariableOverrides(workflow, command.VariableOverrides);
             ApplyEnvironmentOverrides(workflow, command.EnvironmentOverrides);
+
+            WriteProgress(command.Json, "Checking prerequisites...");
+
             EnsureGitHubCopilotInstalledIfRequired(workflow, installationProbe);
+
+            WriteProgress(command.Json, "Executing flow actions...");
 
             var result = await executor.ExecuteAsync(
                 projectFolder,
@@ -679,17 +691,21 @@ public static class CliApplication
 
     private static void EnsureGitHubCopilotInstalledIfRequired(WorkflowDefinition workflow, ICopilotInstallationProbe installationProbe)
     {
-        if (!workflow.Actions.Any(action => string.Equals(action.Uses, "githubCopilot", StringComparison.OrdinalIgnoreCase)))
+        // if flow uses githubCopilot, then write checking GitHub Copilot installed and run check
+        var usesGitHubCopilot = workflow.Actions.Any(action => string.Equals(action.Uses, "githubCopilot", StringComparison.OrdinalIgnoreCase));
+        if (!usesGitHubCopilot)
         {
             return;
         }
 
+        WriteProgress(false, "Checking if GitHub Copilot CLI is installed...");
         if (installationProbe.IsInstalled())
         {
+            WriteSuccess("GitHub Copilot CLI is installed.");
             return;
         }
 
-        throw new CliUsageException("GitHub Copilot action requires the 'copilot' CLI, but it is not installed or not available on PATH.");
+        throw new CliUsageException("GitHub Copilot action requires the GitHub Copilot CLI, but it is not installed or not available on PATH.");
     }
 
     private static int WriteError(bool json, string message)
@@ -701,7 +717,6 @@ public static class CliApplication
         else
         {
             Console.Error.WriteLine(Colorize(AnsiRed, "Error: ") + message);
-            Console.WriteLine("");
         }
 
         return 2;
@@ -711,6 +726,21 @@ public static class CliApplication
     {
         WriteError(json, ex.Message);
         return 10;
+    }
+
+    private static void WriteProgress(bool json, string message)
+    {
+        if (json)
+        {
+            return;
+        }
+
+        Console.WriteLine(Colorize(AnsiCyan, "→ ") + message);
+    }
+
+    private static void WriteSuccess(string message)
+    {
+        Console.WriteLine(Colorize(AnsiGreen, "✓ ") + message);
     }
 
     private static int WriteHelpAndReturn(int exitCode)
@@ -747,6 +777,7 @@ public static class CliApplication
     private const string AnsiRed = "\u001b[31m";
     private const string AnsiYellow = "\u001b[33m";
     private const string AnsiGreen = "\u001b[32m";
+    private const string AnsiCyan = "\u001b[36m";
     private const int BannerContentWidth = 78;
 
     private static string Colorize(string color, string text)
@@ -793,9 +824,9 @@ Usage:
   pgflow [project-folder] [target-working-directory] [workflow-file]
 
 Commands:
-  run                           Validate and execute a workflow.
-  validate                      Load and validate a workflow.
-  init                          Scaffold a workflow project.
+  run                           Validate and execute a flow.
+  validate                      Load and validate a flow.
+  init                          Scaffold a flow project.
   logs                          Show the latest run summary or a selected run.
   help                          Show help information.
   version                       Show the current pgflow version.
@@ -804,8 +835,8 @@ Options:
   -h, --help                    Show help information.
   --workflow <file>             Override the default workflow file name.
   --workdir <path>              Override the target working directory for run.
-  --input key=value             Override a workflow input.
-  --var key=value               Override a workflow variable.
+  --input key=value             Override a flow input.
+  --var key=value               Override a flow variable.
   --env key=value               Inject or override an environment value.
   --dry-run                     Validate without executing actions.
   --template <name>             Template for init: basic-script or script-and-copilot-loop.

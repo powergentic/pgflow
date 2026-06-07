@@ -1572,20 +1572,24 @@ actions:
 
     private static string StripStartupBanner(string text)
     {
-        var bannerStart = text.IndexOf("╭──────────────────────────────────────────────────────────────────────────────╮", StringComparison.Ordinal);
-        if (bannerStart < 0)
+        var normalizedText = System.Text.RegularExpressions.Regex.Replace(text, "\\u001B\\[[0-9;]*m", string.Empty);
+        var bannerStart = normalizedText.IndexOf("╭──────────────────────────────────────────────────────────────────────────────╮", StringComparison.Ordinal);
+        if (bannerStart >= 0)
         {
-            return text;
+            var bannerEnd = normalizedText.IndexOf("╰──────────────────────────────────────────────────────────────────────────────╯", bannerStart, StringComparison.Ordinal);
+            if (bannerEnd >= 0)
+            {
+                var contentStart = bannerEnd + "╰──────────────────────────────────────────────────────────────────────────────╯".Length;
+                normalizedText = normalizedText[contentStart..];
+            }
         }
 
-        var bannerEnd = text.IndexOf("╰──────────────────────────────────────────────────────────────────────────────╯", bannerStart, StringComparison.Ordinal);
-        if (bannerEnd < 0)
-        {
-            return text;
-        }
+        var lines = normalizedText
+            .Split(["\r\n", "\n"], StringSplitOptions.None)
+            .Where(line => !line.StartsWith("→ ", StringComparison.Ordinal))
+            .ToArray();
 
-        var contentStart = bannerEnd + "╰──────────────────────────────────────────────────────────────────────────────╯".Length;
-        return text[contentStart..].TrimStart('\r', '\n');
+        return string.Join(Environment.NewLine, lines).TrimStart();
     }
 
     private static string CreateProjectFolder(string name)
