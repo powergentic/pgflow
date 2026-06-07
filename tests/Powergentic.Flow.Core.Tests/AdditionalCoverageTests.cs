@@ -1556,7 +1556,7 @@ actions:
             try
             {
                 var exitCode = await action();
-                return (exitCode, stdout.ToString(), stderr.ToString());
+                return (exitCode, StripStartupBanner(stdout.ToString()), StripStartupBanner(stderr.ToString()));
             }
             finally
             {
@@ -1568,6 +1568,24 @@ actions:
         {
             ConsoleTestSynchronization.Gate.Release();
         }
+    }
+
+    private static string StripStartupBanner(string text)
+    {
+        var bannerStart = text.IndexOf("╭──────────────────────────────────────────────────────────────────────────────╮", StringComparison.Ordinal);
+        if (bannerStart < 0)
+        {
+            return text;
+        }
+
+        var bannerEnd = text.IndexOf("╰──────────────────────────────────────────────────────────────────────────────╯", bannerStart, StringComparison.Ordinal);
+        if (bannerEnd < 0)
+        {
+            return text;
+        }
+
+        var contentStart = bannerEnd + "╰──────────────────────────────────────────────────────────────────────────────╯".Length;
+        return text[contentStart..].TrimStart('\r', '\n');
     }
 
     private static string CreateProjectFolder(string name)

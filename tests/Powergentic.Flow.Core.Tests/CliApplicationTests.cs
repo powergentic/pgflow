@@ -17,12 +17,14 @@ public sealed class CliApplicationTests
     }
 
     [Fact]
-    public async Task RunAsync_HelpDisplaysAsciiArtTitle()
+    public async Task RunAsync_HelpDisplaysStartupBannerFirst()
     {
-        var (exitCode, stdout, stderr) = await InvokeAsync(["--help"]);
+        var (exitCode, stdout, stderr) = await InvokeAsync(["--help"], preserveStartupBanner: true);
 
         Assert.Equal(0, exitCode);
         Assert.Contains("██████╗", stdout, StringComparison.Ordinal);
+        Assert.Contains("pgflow v", stdout, StringComparison.Ordinal);
+        Assert.Contains($"Copyright © {DateTime.UtcNow.Year} Powergentic", stdout, StringComparison.Ordinal);
         Assert.Contains("Examples:", stdout, StringComparison.Ordinal);
         Assert.Contains("--workdir <path>", stdout, StringComparison.Ordinal);
         Assert.Equal(string.Empty, stderr);
@@ -212,7 +214,7 @@ actions:
         }
     }
 
-    private static async Task<(int ExitCode, string StdOut, string StdErr)> InvokeAsync(string[] args)
+    private static async Task<(int ExitCode, string StdOut, string StdErr)> InvokeAsync(string[] args, bool preserveStartupBanner = false)
     {
         await ConsoleTestSynchronization.Gate.WaitAsync();
         try
@@ -227,7 +229,16 @@ actions:
             try
             {
                 var exitCode = await CliApplication.RunAsync(args);
-                return (exitCode, stdout.ToString(), stderr.ToString());
+                var stdOutText = stdout.ToString();
+                var stdErrText = stderr.ToString();
+
+                if (!preserveStartupBanner)
+                {
+                    stdOutText = StripStartupBanner(stdOutText);
+                    stdErrText = StripStartupBanner(stdErrText);
+                }
+
+                return (exitCode, stdOutText, stdErrText);
             }
             finally
             {
@@ -239,6 +250,24 @@ actions:
         {
             ConsoleTestSynchronization.Gate.Release();
         }
+    }
+
+    private static string StripStartupBanner(string text)
+    {
+        var bannerStart = text.IndexOf("╭──────────────────────────────────────────────────────────────────────────────╮", StringComparison.Ordinal);
+        if (bannerStart < 0)
+        {
+            return text;
+        }
+
+        var bannerEnd = text.IndexOf("╰──────────────────────────────────────────────────────────────────────────────╯", bannerStart, StringComparison.Ordinal);
+        if (bannerEnd < 0)
+        {
+            return text;
+        }
+
+        var contentStart = bannerEnd + "╰──────────────────────────────────────────────────────────────────────────────╯".Length;
+        return text[contentStart..].TrimStart('\r', '\n');
     }
 
     private static string CreateProjectFolder()

@@ -22,6 +22,12 @@ public static class CliApplication
 
     public static async Task<int> RunAsync(string[] args, CancellationToken cancellationToken = default)
     {
+        var json = args.Contains("--json", StringComparer.OrdinalIgnoreCase);
+        if (!json)
+        {
+            Console.WriteLine(GetBannerText());
+        }
+
         try
         {
             var command = ParseCommand(args);
@@ -39,11 +45,11 @@ public static class CliApplication
         }
         catch (CliUsageException ex)
         {
-            return WriteError(args.Contains("--json", StringComparer.OrdinalIgnoreCase), ex.Message);
+            return WriteError(json, ex.Message);
         }
         catch (Exception ex)
         {
-            return WriteUnhandledError(ex, args.Contains("--json", StringComparer.OrdinalIgnoreCase));
+            return WriteUnhandledError(ex, json);
         }
     }
 
@@ -739,8 +745,11 @@ public static class CliApplication
         return "pgflow v" + (assembly.GetName().Version?.ToString() ?? "1.0.0");
     }
 
-    private static string GetHelpText()
-        => """
+    private static string GetCopyrightText()
+        => $"Copyright © {DateTime.UtcNow.Year} Build5Nines LLC";
+
+    private static string GetBannerText()
+        => $$"""
 
  ╭──────────────────────────────────────────────────────────────────────────────╮
  │                                                                              │
@@ -752,11 +761,18 @@ public static class CliApplication
  │   ╚═╝       ╚═════╝ ╚═╝     ╚══════╝ ╚═════╝  ╚══╝╚══╝                       │
  │                                                                              │
  │   Powergentic Flow                                                           │
- │   Run, validate, scaffold, and inspect workflow executions.                  │
+ │   {{GetVersionText(),-74}} │
  │                                                                              │
  │   https://powergentic.ai                                                     │
  │                                                                              │
+ │   {{GetCopyrightText(),-74}} │
+ │                                                                              │
  ╰──────────────────────────────────────────────────────────────────────────────╯
+ 
+""";
+
+    private static string GetHelpText()
+        => """
 
 Usage:
   pgflow <command> [project-folder] [options]
