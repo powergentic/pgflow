@@ -4,7 +4,7 @@ set -uo pipefail
 mkdir -p output/test-results
 coverage_test_report="output/dotnet-test-coverage.txt"
 coverage_report="output/code-coverage-summary.txt"
-minimum_coverage="${MINIMUM_COVERAGE:-90}"
+minimum_code_coverage_percent="${MINIMUM_CODE_COVERAGE_PERCENT:-90}"
 
 find_first() {
   find . -type f \( -name "$1" \) -not -path '*/node_modules/*' -not -path '*/bin/*' -not -path '*/obj/*' | sort | head -n 1
@@ -73,7 +73,7 @@ if [[ $coverage_command_exit -ne 0 || ${#coverage_files[@]} -eq 0 ]]; then
   exit 1
 fi
 
-coverage_percent="$(python3 - "$minimum_coverage" "${coverage_files[@]}" <<'PY'
+coverage_percent="$(python3 - "$minimum_code_coverage_percent" "${coverage_files[@]}" <<'PY'
 import sys
 import xml.etree.ElementTree as ET
 
@@ -92,7 +92,7 @@ PY
 )"
 
 coverage_passed="false"
-python3 - "$coverage_percent" "$minimum_coverage" <<'PY'
+python3 - "$coverage_percent" "$minimum_code_coverage_percent" <<'PY'
 import sys
 percent = float(sys.argv[1])
 minimum = float(sys.argv[2])
