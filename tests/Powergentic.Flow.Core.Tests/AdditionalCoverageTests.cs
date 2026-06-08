@@ -1,7 +1,9 @@
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
+using GitHub.Copilot;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Powergentic.Flow.Actions.GitHubCopilot;
 using Powergentic.Flow.Actions.Script;
@@ -268,6 +270,7 @@ public sealed class AdditionalCoverageTests
                     },
                     ["workingDirectory"] = "/tmp",
                     ["streaming"] = "true",
+                    ["enableConfigDiscovery"] = "false",
                     ["requestHeaders"] = new Dictionary<string, object?>
                     {
                         ["x-trace"] = "abc",
@@ -294,8 +297,10 @@ public sealed class AdditionalCoverageTests
 
             Assert.NotNull(capturedRequest);
             Assert.Equal("Hello World and World", capturedRequest!.Prompt);
+            Assert.Null(capturedRequest.Agent);
             Assert.Equal("/tmp", capturedRequest.WorkingDirectory);
             Assert.True(capturedRequest.Streaming);
+            Assert.False(capturedRequest.EnableConfigDiscovery);
             Assert.Equal("token-from-env", capturedRequest.GitHubToken);
             Assert.Single(capturedRequest.RequestHeaders);
             Assert.Equal("abc", capturedRequest.RequestHeaders["x-trace"]);
@@ -1504,7 +1509,62 @@ actions:
             var result = await runner.RunAsync(context, CancellationToken.None);
 
             Assert.NotNull(capturedRequest);
-            Assert.Equal("inline-token", capturedRequest!.GitHubToken);
+            Assert.Null(capturedRequest!.Agent);
+            Assert.Equal("inline-token", capturedRequest.GitHubToken);
+            Assert.Equal("done", result.Outputs["response"]);
+        }
+        finally
+        {
+            Directory.Delete(projectFolder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task GitHubCopilotActionRunner_UsesConfiguredAgent()
+    {
+        var projectFolder = CreateProjectFolder("copilot-agent");
+        var targetWorkingDirectory = Path.Combine(projectFolder, "target");
+        Directory.CreateDirectory(targetWorkingDirectory);
+
+        CopilotPromptRequest? capturedRequest = null;
+        var adapter = new FakeCopilotClientAdapter(request =>
+        {
+            capturedRequest = request;
+            return Task.FromResult(new CopilotPromptResult
+            {
+                ResponseText = "done",
+                SessionId = "session-agent",
+                MessageId = "message-agent",
+                Model = request.Model,
+            });
+        });
+
+        try
+        {
+            var runner = new GitHubCopilotActionRunner(adapter, new NullLogger<GitHubCopilotActionRunner>());
+            var context = CreateActionContext(
+                new Dictionary<string, object?>
+                {
+                    ["prompt"] = "hello",
+                    ["agent"] = "reviewer",
+                },
+                new WorkflowActionDefinition
+                {
+                    Id = "review",
+                    Uses = "githubCopilot",
+                    With = new Dictionary<string, object?>
+                    {
+                        ["prompt"] = "hello",
+                        ["agent"] = "reviewer",
+                    }
+                },
+                projectFolder,
+                targetWorkingDirectory);
+
+            var result = await runner.RunAsync(context, CancellationToken.None);
+
+            Assert.NotNull(capturedRequest);
+            Assert.Equal("reviewer", capturedRequest!.Agent);
             Assert.Equal("done", result.Outputs["response"]);
         }
         finally
@@ -1556,6 +1616,115 @@ actions:
             Assert.Equal(responsePath, result.Outputs["responseFile"]);
             Assert.Equal(responsePath, result.Metadata["responseFile"]);
             Assert.Equal("stored-response", await File.ReadAllTextAsync(responsePath));
+        }
+        finally
+        {
+            Directory.Delete(projectFolder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void CopilotAgentDiscovery_LoadAgentsFromWorkspace_UsesNameWhenDisplayNameMissing()
+    {
+        var projectFolder = CreateProjectFolder("copilot-agents-name-fallback");
+        var agentsFolder = Path.Combine(projectFolder, ".github", "agents");
+        Directory.CreateDirectory(agentsFolder);
+        var agentPath = Path.Combine(agentsFolder, "review.agent.md");
+        File.WriteAllText(agentPath, """
+---
+name: code reviewer
+description: Reviews code changes
+---
+Review the changed files and summarize the important findings.
+""");
+
+        var logger = new ListLogger();
+
+        try
+        {
+            var agents = CopilotAgentDiscovery.LoadAgentsFromWorkspace(projectFolder, logger);
+
+            var agent = Assert.Single(agents);
+            Assert.Equal("code reviewer", agent.Name);
+            Assert.Equal("code reviewer", agent.DisplayName);
+            Assert.Equal("Reviews code changes", agent.Description);
+            Assert.Equal("Review the changed files and summarize the important findings.", agent.Prompt);
+        }
+        finally
+        {
+            Directory.Delete(projectFolder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void CopilotAgentDiscovery_LoadAgentsFromWorkspace_ParsesYamlFrontmatterAndLogsLoadedAgents()
+    {
+        var projectFolder = CreateProjectFolder("copilot-agents");
+        var agentsFolder = Path.Combine(projectFolder, ".github", "agents");
+        Directory.CreateDirectory(agentsFolder);
+        var agentPath = Path.Combine(agentsFolder, "review.agent.md");
+        File.WriteAllText(agentPath, """
+---
+name: reviewer
+displayName: Code Reviewer
+description: Reviews code changes
+tools:
+  - read_file
+  - grep_search
+skills:
+  - review
+model: gpt-5
+infer: true
+---
+Review the changed files and summarize the important findings.
+""");
+
+        var logger = new ListLogger();
+
+        try
+        {
+            var agents = CopilotAgentDiscovery.LoadAgentsFromWorkspace(projectFolder, logger);
+
+            var agent = Assert.Single(agents);
+            Assert.Equal("reviewer", agent.Name);
+            Assert.Equal("Code Reviewer", agent.DisplayName);
+            Assert.Equal("Reviews code changes", agent.Description);
+            Assert.Equal("gpt-5", agent.Model);
+            Assert.True(agent.Infer);
+            Assert.Equal(["read_file", "grep_search"], agent.Tools);
+            Assert.Equal(["review"], agent.Skills);
+            Assert.Equal("Review the changed files and summarize the important findings.", agent.Prompt);
+            Assert.Contains(logger.Messages, message => message.Contains("Loaded 1 custom agent", StringComparison.Ordinal));
+            Assert.Contains(logger.Messages, message => message.Contains("reviewer", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(projectFolder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void CopilotAgentDiscovery_LoadAgentsFromWorkspace_UsesDefaultsWithoutFrontmatter()
+    {
+        var projectFolder = CreateProjectFolder("copilot-agents-defaults");
+        var agentsFolder = Path.Combine(projectFolder, ".github", "agents", "nested");
+        Directory.CreateDirectory(agentsFolder);
+        var agentPath = Path.Combine(agentsFolder, "triage.agent.md");
+        File.WriteAllText(agentPath, "Triage the issue and propose next steps.\n");
+
+        var logger = new ListLogger();
+
+        try
+        {
+            var agents = CopilotAgentDiscovery.LoadAgentsFromWorkspace(projectFolder, logger);
+
+            var agent = Assert.Single(agents);
+            Assert.Equal("triage", agent.Name);
+            Assert.Equal("triage", agent.DisplayName);
+            Assert.NotNull(agent.Description);
+            Assert.Contains(".github/agents/nested/triage.agent.md", agent.Description.Replace('\\', '/'), StringComparison.Ordinal);
+            Assert.Equal("Triage the issue and propose next steps.", agent.Prompt);
+            Assert.Contains(logger.Messages, message => message.Contains("triage", StringComparison.Ordinal));
         }
         finally
         {
@@ -1703,6 +1872,18 @@ actions:
             ?? throw new InvalidOperationException($"Property '{propertyName}' was not found on {instance.GetType().FullName}.");
 
         return (T)property.GetValue(instance)!;
+    }
+
+    private sealed class ListLogger : ILogger
+    {
+        public List<string> Messages { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            => Messages.Add(formatter(state, exception));
     }
 
     private static void TryMakeExecutable(string scriptPath)

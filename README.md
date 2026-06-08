@@ -242,6 +242,8 @@ Supported `with` fields:
 - `gitHubToken`
 - `requestHeaders`
 
+When `streaming: true`, pgflow streams Copilot response chunks as they arrive and logs Copilot reasoning/thought updates live through the normal console/transcript logging pipeline.
+
 Prompt placeholders support both `{{name}}` and `${name}` forms.
 
 ### Publish behavior

@@ -8,4 +8,6 @@
   <Folder Name="/tests/">
     <Project Path="tests/Powergentic.Flow.Core.Tests/Powergentic.Flow.Core.Tests.csproj" />
   </Folder>
+  <Folder Name="/workspace/" />
+  <Folder Name="/workspace/tmp/" />
 </Solution>

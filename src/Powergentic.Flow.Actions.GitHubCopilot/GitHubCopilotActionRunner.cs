@@ -24,20 +24,24 @@ public sealed class GitHubCopilotActionRunner(ICopilotClientAdapter copilotClien
         context.Environment.TryGetValue("GITHUB_TOKEN", out var envToken);
 
         var configuredModel = context.GetString("model");
+        var configuredEnableConfigDiscovery = context.GetString("enableConfigDiscovery");
+        var configuredAgent = context.GetString("agent");
         var request = new CopilotPromptRequest
         {
             Prompt = prompt,
             WorkingDirectory = workingDirectory,
+            Agent = string.IsNullOrWhiteSpace(configuredAgent) ? null : configuredAgent,
             Model = string.IsNullOrWhiteSpace(configuredModel) ? "auto" : configuredModel,
             SystemPrompt = context.GetString("systemPrompt"),
             Streaming = bool.TryParse(context.GetString("streaming"), out var streaming) && streaming,
+            EnableConfigDiscovery = !bool.TryParse(configuredEnableConfigDiscovery, out var enableConfigDiscovery) || enableConfigDiscovery,
             GitHubToken = context.GetString("gitHubToken") ?? envToken,
             RequestHeaders = context.GetStringMap("requestHeaders")
                 .Where(pair => !string.IsNullOrWhiteSpace(pair.Value))
                 .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase),
         };
 
-        logger.LogInformation("Sending prompt to GitHub Copilot for action {ActionId} in {WorkingDirectory}", context.Action.Id, workingDirectory);
+        logger.LogInformation("Sending prompt to GitHub Copilot for action '{ActionId}' in '{WorkingDirectory}'", context.Action.Id, workingDirectory);
         var result = await copilotClient.PromptAsync(request, cancellationToken);
 
         if (!string.IsNullOrWhiteSpace(responsePath))

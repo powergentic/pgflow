@@ -96,8 +96,50 @@ public class GitHubCopilotActionRunnerTests
             var result = await runner.RunAsync(context, CancellationToken.None);
 
             Assert.NotNull(capturedRequest);
-            Assert.Equal("auto", capturedRequest!.Model);
+            Assert.Null(capturedRequest!.Agent);
+            Assert.Equal("auto", capturedRequest.Model);
+            Assert.True(capturedRequest.EnableConfigDiscovery);
             Assert.Equal("auto", result.Outputs["model"]);
+        }
+        finally
+        {
+            Directory.Delete(projectFolder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task RunAsync_UsesConfiguredAgentWhenSpecified()
+    {
+        var projectFolder = CreateProjectFolder();
+        var targetWorkingDirectory = Path.Combine(projectFolder, "target");
+        Directory.CreateDirectory(targetWorkingDirectory);
+
+        CopilotPromptRequest? capturedRequest = null;
+        var adapter = new FakeCopilotClientAdapter(request =>
+        {
+            capturedRequest = request;
+            return Task.FromResult(new CopilotPromptResult
+            {
+                ResponseText = "done",
+                SessionId = "session-agent",
+                MessageId = "message-agent",
+                Model = request.Model,
+            });
+        });
+
+        try
+        {
+            var runner = new GitHubCopilotActionRunner(adapter, new NullLogger<GitHubCopilotActionRunner>());
+            var context = CreateActionContext(projectFolder, targetWorkingDirectory, new Dictionary<string, object?>
+            {
+                ["prompt"] = "hello",
+                ["agent"] = "reviewer"
+            });
+
+            await runner.RunAsync(context, CancellationToken.None);
+
+            Assert.NotNull(capturedRequest);
+            Assert.Equal("reviewer", capturedRequest!.Agent);
         }
         finally
         {

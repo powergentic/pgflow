@@ -5,6 +5,7 @@ variables:
   # pgflow run samples/script-and-copilot-loop <target-working-directory> --var userPrompt="Build a TODO app for a small team"
   userPrompt: Build an ASP.NET Core MVC TODO list application that uses Bootstrap CSS and a traditional HTTP GET/POST request model.
   minimumCodeCoveragePercent: 90
+  copilotModel: auto
 execution:
   maxTransitions: 100
   maxVisitsPerAction: 50
@@ -20,7 +21,8 @@ actions:
     name: Implement from user prompt
     uses: githubCopilot
     with:
-      model: auto
+      model: ${ variables.copilotModel }
+      agent: Happy Agent
       promptFile: prompts/build-app.prompt.md
       inputs:
         targetPath: ${ runtime.targetWorkingDirectory }
