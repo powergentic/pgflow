@@ -22,6 +22,14 @@ jobs:
             runtime: osx-x64
             artifact_name: pgflow-osx-x64
             executable_name: pgflow
+          - os: macos-latest
+            runtime: osx-arm64
+            artifact_name: pgflow-osx-arm64
+            executable_name: pgflow
+          - os: ubuntu-latest
+            runtime: linux-x64
+            artifact_name: pgflow-linux-x64
+            executable_name: pgflow
 
     steps:
       - name: Check out repository
