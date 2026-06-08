@@ -1,3 +1,7 @@
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.Runtime.InteropServices;
 using GitHub.Copilot;
 using Microsoft.Extensions.Logging;
 using Powergentic.Flow.Core.Abstractions;
@@ -7,8 +11,13 @@ namespace Powergentic.Flow.Actions.GitHubCopilot;
 
 public sealed class CopilotClientAdapter(ILogger<CopilotClientAdapter> logger) : ICopilotClientAdapter
 {
+    private static bool executableBitVerified;
+    private static readonly Lock ExecutableBitVerificationLock = new();
+
     public async Task<CopilotPromptResult> PromptAsync(CopilotPromptRequest request, CancellationToken cancellationToken)
     {
+        EnsureExtractedCopilotCliIsExecutable();
+
         var options = new CopilotClientOptions
         {
             WorkingDirectory = request.WorkingDirectory,
@@ -72,6 +81,57 @@ public sealed class CopilotClientAdapter(ILogger<CopilotClientAdapter> logger) :
                 ["workingDirectory"] = request.WorkingDirectory,
             },
         };
+    }
+
+    private static void EnsureExtractedCopilotCliIsExecutable()
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) || executableBitVerified)
+        {
+            return;
+        }
+
+        lock (ExecutableBitVerificationLock)
+        {
+            if (executableBitVerified)
+            {
+                return;
+            }
+
+            try
+            {
+                var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                var cacheBase = Path.Combine(home, ".net", "pgflow");
+                if (!Directory.Exists(cacheBase))
+                {
+                    executableBitVerified = true;
+                    return;
+                }
+
+                foreach (var copilotPath in Directory.EnumerateFiles(cacheBase, "copilot", SearchOption.AllDirectories))
+                {
+                    try
+                    {
+                        var psi = new ProcessStartInfo("chmod", $"+x \"{copilotPath}\"")
+                        {
+                            RedirectStandardOutput = true,
+                            RedirectStandardError = true,
+                            UseShellExecute = false,
+                            CreateNoWindow = true,
+                        };
+                        using var process = Process.Start(psi);
+                        process?.WaitForExit();
+                    }
+                    catch
+                    {
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            executableBitVerified = true;
+        }
     }
 
     private static int? ToNullableInt(long? value)
