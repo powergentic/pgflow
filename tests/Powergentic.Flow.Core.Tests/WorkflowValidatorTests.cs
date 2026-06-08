@@ -173,6 +173,62 @@ public class WorkflowValidatorTests
     }
 
     [Fact]
+    public void Validate_SucceedsWhenCopilotTimeoutIsProvided()
+    {
+        var workflow = new WorkflowDefinition
+        {
+            Name = "demo",
+            Actions =
+            [
+                new WorkflowActionDefinition
+                {
+                    Id = "review",
+                    Uses = "githubCopilot",
+                    With = new Dictionary<string, object?>
+                    {
+                        ["prompt"] = "Review the project",
+                        ["timeout"] = "00:30:00",
+                    }
+                }
+            ]
+        };
+
+        var validator = new WorkflowValidator();
+        var result = validator.Validate(workflow);
+
+        Assert.True(result.Succeeded);
+        Assert.Empty(result.Errors);
+    }
+
+    [Fact]
+    public void Validate_SucceedsWhenCopilotSessionIdIsProvided()
+    {
+        var workflow = new WorkflowDefinition
+        {
+            Name = "demo",
+            Actions =
+            [
+                new WorkflowActionDefinition
+                {
+                    Id = "review",
+                    Uses = "githubCopilot",
+                    With = new Dictionary<string, object?>
+                    {
+                        ["prompt"] = "Review the project",
+                        ["sessionId"] = "shared-session",
+                    }
+                }
+            ]
+        };
+
+        var validator = new WorkflowValidator();
+        var result = validator.Validate(workflow);
+
+        Assert.True(result.Succeeded);
+        Assert.Empty(result.Errors);
+    }
+
+    [Fact]
     public void Validate_FailsForUnconditionalSelfLoop()
     {
         var workflow = new WorkflowDefinition

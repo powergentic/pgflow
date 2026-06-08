@@ -56,8 +56,10 @@ public class GitHubCopilotActionRunnerTests
             Assert.Equal(Path.Combine(targetWorkingDirectory, "output", "review.txt"), result.Outputs["responseFile"]);
             Assert.Equal("done", await File.ReadAllTextAsync(Path.Combine(targetWorkingDirectory, "output", "review.txt")));
             Assert.Equal("gpt-5", result.Outputs["model"]);
+            Assert.Equal("false", result.Outputs["timedOut"]);
             Assert.Equal("12", result.Outputs["outputTokens"]);
             Assert.Equal(targetWorkingDirectory, result.Metadata["workingDirectory"]);
+            Assert.Equal(false, result.Metadata["timedOut"]);
         }
         finally
         {
@@ -96,8 +98,10 @@ public class GitHubCopilotActionRunnerTests
             var result = await runner.RunAsync(context, CancellationToken.None);
 
             Assert.NotNull(capturedRequest);
-            Assert.Null(capturedRequest!.Agent);
+            Assert.Null(capturedRequest!.SessionId);
+            Assert.Null(capturedRequest.Agent);
             Assert.Equal("auto", capturedRequest.Model);
+            Assert.Equal(CopilotPromptRequest.DefaultTimeout, capturedRequest.Timeout);
             Assert.True(capturedRequest.EnableConfigDiscovery);
             Assert.Equal("auto", result.Outputs["model"]);
         }
@@ -148,6 +152,87 @@ public class GitHubCopilotActionRunnerTests
     }
 
     [Fact]
+    public async Task RunAsync_UsesConfiguredTimeoutWhenSpecified()
+    {
+        var projectFolder = CreateProjectFolder();
+        var targetWorkingDirectory = Path.Combine(projectFolder, "target");
+        Directory.CreateDirectory(targetWorkingDirectory);
+
+        CopilotPromptRequest? capturedRequest = null;
+        var adapter = new FakeCopilotClientAdapter(request =>
+        {
+            capturedRequest = request;
+            return Task.FromResult(new CopilotPromptResult
+            {
+                ResponseText = "done",
+                SessionId = "session-timeout",
+                MessageId = "message-timeout",
+                Model = request.Model,
+            });
+        });
+
+        try
+        {
+            var runner = new GitHubCopilotActionRunner(adapter, new NullLogger<GitHubCopilotActionRunner>());
+            var context = CreateActionContext(projectFolder, targetWorkingDirectory, new Dictionary<string, object?>
+            {
+                ["prompt"] = "hello",
+                ["timeout"] = "90"
+            });
+
+            await runner.RunAsync(context, CancellationToken.None);
+
+            Assert.NotNull(capturedRequest);
+            Assert.Equal(TimeSpan.FromMinutes(90), capturedRequest!.Timeout);
+        }
+        finally
+        {
+            Directory.Delete(projectFolder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task RunAsync_UsesConfiguredSessionIdWhenSpecified()
+    {
+        var projectFolder = CreateProjectFolder();
+        var targetWorkingDirectory = Path.Combine(projectFolder, "target");
+        Directory.CreateDirectory(targetWorkingDirectory);
+
+        CopilotPromptRequest? capturedRequest = null;
+        var adapter = new FakeCopilotClientAdapter(request =>
+        {
+            capturedRequest = request;
+            return Task.FromResult(new CopilotPromptResult
+            {
+                ResponseText = "done",
+                SessionId = request.SessionId,
+                MessageId = "message-session",
+                Model = request.Model,
+            });
+        });
+
+        try
+        {
+            var runner = new GitHubCopilotActionRunner(adapter, new NullLogger<GitHubCopilotActionRunner>());
+            var context = CreateActionContext(projectFolder, targetWorkingDirectory, new Dictionary<string, object?>
+            {
+                ["prompt"] = "hello",
+                ["sessionId"] = "shared-session"
+            });
+
+            var result = await runner.RunAsync(context, CancellationToken.None);
+
+            Assert.NotNull(capturedRequest);
+            Assert.Equal("shared-session", capturedRequest!.SessionId);
+            Assert.Equal("shared-session", result.Outputs["sessionId"]);
+        }
+        finally
+        {
+            Directory.Delete(projectFolder, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task RunAsync_ResolvesRelativeWorkingDirectoryFromTargetWorkingDirectory()
     {
         var projectFolder = CreateProjectFolder();
@@ -182,6 +267,43 @@ public class GitHubCopilotActionRunnerTests
             Assert.NotNull(capturedRequest);
             Assert.Equal(nested, capturedRequest!.WorkingDirectory);
             Assert.Equal(nested, result.Metadata["workingDirectory"]);
+        }
+        finally
+        {
+            Directory.Delete(projectFolder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task RunAsync_ExposesTimedOutOutputWhenCopilotTimesOut()
+    {
+        var projectFolder = CreateProjectFolder();
+        var targetWorkingDirectory = Path.Combine(projectFolder, "target");
+        Directory.CreateDirectory(targetWorkingDirectory);
+
+        try
+        {
+            var runner = new GitHubCopilotActionRunner(
+                new FakeCopilotClientAdapter(_ => Task.FromResult(new CopilotPromptResult
+                {
+                    ResponseText = string.Empty,
+                    SessionId = "session-timeout",
+                    MessageId = null,
+                    Model = "auto",
+                    TimedOut = true,
+                })),
+                new NullLogger<GitHubCopilotActionRunner>());
+            var context = CreateActionContext(projectFolder, targetWorkingDirectory, new Dictionary<string, object?>
+            {
+                ["prompt"] = "hello"
+            });
+
+            var result = await runner.RunAsync(context, CancellationToken.None);
+
+            Assert.Equal(ActionExecutionStatus.Succeeded, result.Status);
+            Assert.Equal("true", result.Outputs["timedOut"]);
+            Assert.Equal(true, result.Metadata["timedOut"]);
+            Assert.Equal("GitHub Copilot prompt timed out.", result.Summary);
         }
         finally
         {

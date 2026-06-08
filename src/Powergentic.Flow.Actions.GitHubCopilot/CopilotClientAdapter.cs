@@ -34,6 +34,7 @@ public sealed class CopilotClientAdapter(ILogger<CopilotClientAdapter> logger) :
 
         await using var session = await client.CreateSessionAsync(new SessionConfig
         {
+            SessionId = request.SessionId,
             Agent = request.Agent,
             Model = request.Model,
             Streaming = request.Streaming,
@@ -53,15 +54,26 @@ public sealed class CopilotClientAdapter(ILogger<CopilotClientAdapter> logger) :
             .ToDictionary(kvp => kvp.Key, kvp => kvp.Value!, StringComparer.OrdinalIgnoreCase);
 
         AssistantMessageData? responseData = null;
+        var timedOut = false;
         try
         {
             var response = await session.SendAndWaitAsync(new MessageOptions
             {
                 Prompt = prompt,
                 RequestHeaders = headers,
-            }, TimeSpan.FromMinutes(10), cancellationToken);
+            }, request.Timeout, cancellationToken);
 
             responseData = response?.Data;
+        }
+        catch (TimeoutException ex)
+        {
+            timedOut = true;
+            logger.LogWarning(ex, "GitHub Copilot prompt timed out after {Timeout} in {WorkingDirectory}", request.Timeout, request.WorkingDirectory);
+        }
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            timedOut = true;
+            logger.LogWarning(ex, "GitHub Copilot prompt timed out after {Timeout} in {WorkingDirectory}", request.Timeout, request.WorkingDirectory);
         }
         finally
         {
@@ -75,11 +87,13 @@ public sealed class CopilotClientAdapter(ILogger<CopilotClientAdapter> logger) :
                 ResponseText = string.Empty,
                 SessionId = session.SessionId,
                 Model = request.Model,
+                TimedOut = timedOut,
                 InputTokens = null,
                 OutputTokens = null,
                 Metadata = new Dictionary<string, object?>
                 {
                     ["workingDirectory"] = request.WorkingDirectory,
+                    ["timedOut"] = timedOut,
                 },
             };
         }
@@ -90,11 +104,13 @@ public sealed class CopilotClientAdapter(ILogger<CopilotClientAdapter> logger) :
             MessageId = responseData.MessageId,
             SessionId = session.SessionId,
             Model = responseData.Model ?? request.Model,
+            TimedOut = timedOut,
             InputTokens = null,
             OutputTokens = ToNullableInt(responseData.OutputTokens),
             Metadata = new Dictionary<string, object?>
             {
                 ["workingDirectory"] = request.WorkingDirectory,
+                ["timedOut"] = timedOut,
             },
         };
     }

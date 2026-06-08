@@ -236,13 +236,19 @@ Supported `with` fields:
 - `inputs`
 - `writeResponseTo`
 - `workingDirectory`
+- `sessionId`
 - `model`
 - `systemPrompt`
 - `streaming`
+- `timeout`
 - `gitHubToken`
 - `requestHeaders`
 
 When `streaming: true`, pgflow streams Copilot response chunks as they arrive and logs Copilot reasoning/thought updates live through the normal console/transcript logging pipeline.
+
+`sessionId` is optional. When provided, the action reuses or continues that Copilot session, which allows later actions to pass `${ actions.somePriorAction.outputs.sessionId }`.
+
+`timeout` defaults to `60` minutes when omitted. It accepts either a positive number of minutes or a `TimeSpan` value such as `00:30:00`.
 
 Prompt placeholders support both `{{name}}` and `${name}` forms.
 

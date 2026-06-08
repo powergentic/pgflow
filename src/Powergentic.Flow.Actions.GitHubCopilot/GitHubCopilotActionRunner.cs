@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Powergentic.Flow.Core.Abstractions;
 using Powergentic.Flow.Core.Models;
@@ -26,14 +27,18 @@ public sealed class GitHubCopilotActionRunner(ICopilotClientAdapter copilotClien
         var configuredModel = context.GetString("model");
         var configuredEnableConfigDiscovery = context.GetString("enableConfigDiscovery");
         var configuredAgent = context.GetString("agent");
+        var configuredSessionId = context.GetString("sessionId");
+        var configuredTimeout = context.GetString("timeout");
         var request = new CopilotPromptRequest
         {
             Prompt = prompt,
             WorkingDirectory = workingDirectory,
+            SessionId = string.IsNullOrWhiteSpace(configuredSessionId) ? null : configuredSessionId,
             Agent = string.IsNullOrWhiteSpace(configuredAgent) ? null : configuredAgent,
             Model = string.IsNullOrWhiteSpace(configuredModel) ? "auto" : configuredModel,
             SystemPrompt = context.GetString("systemPrompt"),
             Streaming = bool.TryParse(context.GetString("streaming"), out var streaming) && streaming,
+            Timeout = ResolveTimeout(configuredTimeout, context.Action.Id),
             EnableConfigDiscovery = !bool.TryParse(configuredEnableConfigDiscovery, out var enableConfigDiscovery) || enableConfigDiscovery,
             GitHubToken = context.GetString("gitHubToken") ?? envToken,
             RequestHeaders = context.GetStringMap("requestHeaders")
@@ -57,6 +62,7 @@ public sealed class GitHubCopilotActionRunner(ICopilotClientAdapter copilotClien
             ["sessionId"] = result.SessionId,
             ["messageId"] = result.MessageId,
             ["model"] = result.Model,
+            ["timedOut"] = result.TimedOut.ToString().ToLowerInvariant(),
         };
 
         if (result.OutputTokens is not null)
@@ -68,13 +74,14 @@ public sealed class GitHubCopilotActionRunner(ICopilotClientAdapter copilotClien
         {
             ["workingDirectory"] = workingDirectory,
             ["responseFile"] = responsePath,
+            ["timedOut"] = result.TimedOut,
         };
 
         return new ActionResult
         {
             ActionId = context.Action.Id,
             Status = ActionExecutionStatus.Succeeded,
-            Summary = "GitHub Copilot prompt completed.",
+            Summary = result.TimedOut ? "GitHub Copilot prompt timed out." : "GitHub Copilot prompt completed.",
             Outputs = outputs,
             Metadata = metadata,
             StartedAt = startedAt,
@@ -112,6 +119,31 @@ public sealed class GitHubCopilotActionRunner(ICopilotClientAdapter copilotClien
         }
 
         return content;
+    }
+
+    private static TimeSpan ResolveTimeout(string? configuredTimeout, string actionId)
+    {
+        if (string.IsNullOrWhiteSpace(configuredTimeout))
+        {
+            return CopilotPromptRequest.DefaultTimeout;
+        }
+
+        if (double.TryParse(configuredTimeout, NumberStyles.Float, CultureInfo.InvariantCulture, out var timeoutMinutes))
+        {
+            if (timeoutMinutes > 0)
+            {
+                return TimeSpan.FromMinutes(timeoutMinutes);
+            }
+
+            throw new InvalidOperationException($"Action '{actionId}' has invalid 'with.timeout'. Expected a positive duration.");
+        }
+
+        if (TimeSpan.TryParse(configuredTimeout, CultureInfo.InvariantCulture, out var timeout) && timeout > TimeSpan.Zero)
+        {
+            return timeout;
+        }
+
+        throw new InvalidOperationException($"Action '{actionId}' has invalid 'with.timeout'. Use a positive number of minutes or a TimeSpan value like '00:30:00'.");
     }
 
     private static string ResolvePath(string projectFolder, string path)

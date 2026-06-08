@@ -235,9 +235,11 @@ GitHub Copilot actions are implemented by `GitHubCopilotActionRunner` in `src/Po
       key: value
     writeResponseTo: string
     workingDirectory: string
+    sessionId: string
     model: string
     systemPrompt: string
     streaming: true | false
+    timeout: 60 | 00:30:00
     gitHubToken: string
     requestHeaders:
       Header-Name: value
@@ -252,9 +254,11 @@ GitHub Copilot actions are implemented by `GitHubCopilotActionRunner` in `src/Po
 | `inputs` | `map<string, any>` | No | Values are expression-resolved before prompt templating. |
 | `writeResponseTo` | `string` | No | If set, response text is written to a file. Relative paths resolve from the target working directory after interpolation. |
 | `workingDirectory` | `string` | No | Working directory sent to the Copilot adapter. Relative paths resolve from the target working directory. |
+| `sessionId` | `string` | No | Optional Copilot session id. Can be used to continue a previous `githubCopilot` session, including via `${ actions.someAction.outputs.sessionId }`. |
 | `model` | `string` | No | Defaults to `auto`. |
 | `systemPrompt` | `string` | No | Optional system prompt. |
 | `streaming` | `bool` or `string` | No | Parsed as a boolean. Defaults to `false`. |
+| `timeout` | `number` or `string` | No | Defaults to `60` minutes. Accepts a positive number of minutes or a `TimeSpan` value like `00:30:00`. |
 | `gitHubToken` | `string` | No | Overrides `GITHUB_TOKEN` from environment when provided. |
 | `requestHeaders` | `map<string, string?>` | No | Non-empty values are forwarded as request headers. |
 

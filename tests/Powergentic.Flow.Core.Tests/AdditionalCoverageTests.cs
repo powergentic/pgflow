@@ -297,9 +297,11 @@ public sealed class AdditionalCoverageTests
 
             Assert.NotNull(capturedRequest);
             Assert.Equal("Hello World and World", capturedRequest!.Prompt);
+            Assert.Null(capturedRequest.SessionId);
             Assert.Null(capturedRequest.Agent);
             Assert.Equal("/tmp", capturedRequest.WorkingDirectory);
             Assert.True(capturedRequest.Streaming);
+            Assert.Equal(CopilotPromptRequest.DefaultTimeout, capturedRequest.Timeout);
             Assert.False(capturedRequest.EnableConfigDiscovery);
             Assert.Equal("token-from-env", capturedRequest.GitHubToken);
             Assert.Single(capturedRequest.RequestHeaders);
@@ -1512,6 +1514,7 @@ actions:
             Assert.Null(capturedRequest!.Agent);
             Assert.Equal("inline-token", capturedRequest.GitHubToken);
             Assert.Equal("done", result.Outputs["response"]);
+            Assert.Equal("false", result.Outputs["timedOut"]);
         }
         finally
         {
