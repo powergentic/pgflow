@@ -366,6 +366,20 @@ public sealed class WorkflowExecutionConsole
             return ConsoleColor.Cyan;
         }
 
+        if (message.StartsWith("├─ Agent:", StringComparison.Ordinal)
+            || message.StartsWith("├─ Model:", StringComparison.Ordinal)
+            || message.StartsWith("├─ Actual Model:", StringComparison.Ordinal)
+            || message.StartsWith("│  Model Used:", StringComparison.Ordinal))
+        {
+            return ConsoleColor.Blue;
+        }
+
+        if (message.StartsWith("├─ System Prompt", StringComparison.Ordinal)
+            || message.StartsWith("├─ Prompt", StringComparison.Ordinal))
+        {
+            return ConsoleColor.DarkYellow;
+        }
+
         if (message.StartsWith("├─ Intent:", StringComparison.Ordinal))
         {
             return ConsoleColor.Magenta;
