@@ -81,7 +81,6 @@ public static class CliApplication
         var executor = provider.GetRequiredService<IWorkflowExecutor>();
         var logger = provider.GetRequiredService<ILoggerFactory>().CreateLogger("Cli");
         var loader = provider.GetRequiredService<IWorkflowLoader>();
-        var installationProbe = provider.GetRequiredService<ICopilotInstallationProbe>();
         var executionConsole = displayConsole ?? provider.GetRequiredService<WorkflowExecutionConsole>();
         var observer = command.Json ? null : new WorkflowExecutionObserver(executionConsole);
 
@@ -101,13 +100,6 @@ public static class CliApplication
             ApplyInputOverrides(workflow, command.InputOverrides);
             ApplyVariableOverrides(workflow, command.VariableOverrides);
             ApplyEnvironmentOverrides(workflow, command.EnvironmentOverrides);
-
-            if (!command.Json)
-            {
-                executionConsole.WriteProgress("Checking prerequisites...");
-            }
-
-            EnsureGitHubCopilotInstalledIfRequired(workflow, installationProbe, command.Json ? null : executionConsole);
 
             if (!command.Json)
             {
@@ -733,24 +725,6 @@ public static class CliApplication
 
     private static void WriteJson<T>(T value)
         => Console.WriteLine(JsonSerializer.Serialize(value, JsonOptions));
-
-    private static void EnsureGitHubCopilotInstalledIfRequired(WorkflowDefinition workflow, ICopilotInstallationProbe installationProbe, WorkflowExecutionConsole? executionConsole = null)
-    {
-        var usesGitHubCopilot = workflow.Actions.Any(action => string.Equals(action.Uses, "githubCopilot", StringComparison.OrdinalIgnoreCase));
-        if (!usesGitHubCopilot)
-        {
-            return;
-        }
-
-        executionConsole?.WriteProgress("Checking if GitHub Copilot CLI is installed...");
-        if (installationProbe.IsInstalled())
-        {
-            executionConsole?.WriteSuccess("GitHub Copilot CLI is installed.");
-            return;
-        }
-
-        throw new CliUsageException("GitHub Copilot action requires the GitHub Copilot CLI, but it is not installed or not available on PATH.");
-    }
 
     private static int WriteError(bool json, string message, WorkflowExecutionConsole? executionConsole = null)
     {

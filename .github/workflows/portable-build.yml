@@ -51,6 +51,7 @@ jobs:
           --self-contained true
           -p:PublishSingleFile=true
           -p:EnableCompressionInSingleFile=true
+          -p:IncludeAllContentForSelfExtract=true
           -p:PublishTrimmed=false
           -p:DebugType=None
           -p:DebugSymbols=false

@@ -7,7 +7,6 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddGitHubCopilotAction(this IServiceCollection services)
     {
-        services.AddSingleton<ICopilotInstallationProbe, CopilotInstallationProbe>();
         services.AddSingleton<ICopilotClientAdapter, CopilotClientAdapter>();
         services.AddSingleton<IActionRunner, GitHubCopilotActionRunner>();
         return services;

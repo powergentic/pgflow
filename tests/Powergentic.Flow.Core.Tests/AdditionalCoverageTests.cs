@@ -16,46 +16,6 @@ namespace Powergentic.Flow.Core.Tests;
 public sealed class AdditionalCoverageTests
 {
     [Fact]
-    public void CopilotInstallationProbe_ReturnsTrueWhenVersionIsReportedOnStandardOutput()
-    {
-        var probe = new CopilotInstallationProbe(() => (true, "GitHub Copilot CLI 1.0.60.\nRun 'copilot update' to check for updates.", string.Empty));
-
-        Assert.True(probe.IsInstalled());
-    }
-
-    [Fact]
-    public void CopilotInstallationProbe_ReturnsTrueWhenVersionIsReportedOnStandardError()
-    {
-        var probe = new CopilotInstallationProbe(() => (true, string.Empty, "GitHub Copilot CLI 1.0.60."));
-
-        Assert.True(probe.IsInstalled());
-    }
-
-    [Fact]
-    public void CopilotInstallationProbe_ReturnsTrueWhenVersionIsCapturedBeforeProcessExits()
-    {
-        var probe = new CopilotInstallationProbe(() => (false, "GitHub Copilot CLI 1.0.60.", string.Empty));
-
-        Assert.True(probe.IsInstalled());
-    }
-
-    [Fact]
-    public void CopilotInstallationProbe_ReturnsFalseWhenProcessDoesNotExitAndNoVersionIsCaptured()
-    {
-        var probe = new CopilotInstallationProbe(() => (false, "Install GitHub Copilot CLI? ['y/N']", string.Empty));
-
-        Assert.False(probe.IsInstalled());
-    }
-
-    [Fact]
-    public void CopilotInstallationProbe_ReturnsFalseWhenVersionCommandThrows()
-    {
-        var probe = new CopilotInstallationProbe(() => throw new InvalidOperationException("boom"));
-
-        Assert.False(probe.IsInstalled());
-    }
-
-    [Fact]
     public async Task RunLogWriter_WriteActionLogAsync_RecreatesMissingActionsDirectory()
     {
         var projectFolder = CreateProjectFolder("run-log-writer-action-dir");
@@ -1604,55 +1564,12 @@ actions:
     }
 
     [Fact]
-    public async Task CliApplication_RunCommandFailsBeforeExecutionWhenCopilotActionExistsAndCopilotIsMissing()
-    {
-        var projectFolder = CreateProjectFolder("copilot-preflight-missing");
-        var targetWorkingDirectory = Path.Combine(projectFolder, "target");
-        Directory.CreateDirectory(targetWorkingDirectory);
-
-        try
-        {
-            await File.WriteAllTextAsync(Path.Combine(projectFolder, "flow.yml"), """
-name: Copilot Missing Demo
-version: 1
-actions:
-  - id: implement
-    uses: githubCopilot
-    with:
-      prompt: hello
-""");
-
-            var previousPath = Environment.GetEnvironmentVariable("PATH");
-            Environment.SetEnvironmentVariable("PATH", string.Empty);
-            try
-            {
-                var (exitCode, stdout, stderr) = await InvokeConsoleAsync(() => CliApplication.RunAsync(["run", projectFolder, targetWorkingDirectory]));
-
-                Assert.Equal(2, exitCode);
-                Assert.Equal(string.Empty, stdout);
-                Assert.Contains("Error: GitHub Copilot action requires the GitHub Copilot CLI, but it is not installed or not available on PATH.", stderr, StringComparison.OrdinalIgnoreCase);
-            }
-            finally
-            {
-                Environment.SetEnvironmentVariable("PATH", previousPath);
-            }
-        }
-        finally
-        {
-            Directory.Delete(projectFolder, recursive: true);
-        }
-    }
-
-    [Fact]
     public void ServiceCollectionExtensions_RegisterGitHubCopilotServices()
     {
         var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
 
         services.AddGitHubCopilotAction();
 
-        Assert.Contains(services, descriptor =>
-            descriptor.ServiceType == typeof(ICopilotInstallationProbe)
-            && descriptor.ImplementationType == typeof(CopilotInstallationProbe));
         Assert.Contains(services, descriptor =>
             descriptor.ServiceType == typeof(ICopilotClientAdapter)
             && descriptor.ImplementationType == typeof(CopilotClientAdapter));
