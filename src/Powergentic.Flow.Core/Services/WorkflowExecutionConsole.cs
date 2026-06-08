@@ -215,6 +215,17 @@ public sealed class WorkflowExecutionConsole
         }
     }
 
+    public void WriteStreamingLine(string message)
+    {
+        lock (_sync)
+        {
+            ClearDashboardLocked();
+            WriteConsoleLineLocked(message, GetStreamingColor(message), null);
+            AppendTranscriptLocked(message);
+            RenderDashboardLocked();
+        }
+    }
+
     public void WritePlainBlock(string header, string content)
     {
         lock (_sync)
@@ -346,6 +357,36 @@ public sealed class WorkflowExecutionConsole
         }
 
         writer.WriteLine(formatted);
+    }
+
+    private static ConsoleColor? GetStreamingColor(string message)
+    {
+        if (message.StartsWith("╭─ GitHub Copilot", StringComparison.Ordinal))
+        {
+            return ConsoleColor.Cyan;
+        }
+
+        if (message.StartsWith("├─ Intent:", StringComparison.Ordinal))
+        {
+            return ConsoleColor.Magenta;
+        }
+
+        if (message.StartsWith("├─ Thought", StringComparison.Ordinal))
+        {
+            return ConsoleColor.Yellow;
+        }
+
+        if (message.StartsWith("├─ Response", StringComparison.Ordinal))
+        {
+            return ConsoleColor.Green;
+        }
+
+        if (message.StartsWith("╰─ Turn complete", StringComparison.Ordinal))
+        {
+            return ConsoleColor.DarkGray;
+        }
+
+        return null;
     }
 
     private void AppendTranscriptLocked(string line)

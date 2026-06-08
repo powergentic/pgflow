@@ -7,10 +7,11 @@ using GitHub.Copilot;
 using Microsoft.Extensions.Logging;
 using Powergentic.Flow.Core.Abstractions;
 using Powergentic.Flow.Core.Models;
+using Powergentic.Flow.Core.Services;
 
 namespace Powergentic.Flow.Actions.GitHubCopilot;
 
-public sealed class CopilotClientAdapter(ILogger<CopilotClientAdapter> logger) : ICopilotClientAdapter
+public sealed class CopilotClientAdapter(ILogger<CopilotClientAdapter> logger, ILoggerFactory loggerFactory) : ICopilotClientAdapter
 {
     private static bool executableBitVerified;
     private static readonly Lock ExecutableBitVerificationLock = new();
@@ -19,7 +20,8 @@ public sealed class CopilotClientAdapter(ILogger<CopilotClientAdapter> logger) :
     {
         EnsureExtractedCopilotCliIsExecutable();
         var customAgents = CopilotAgentDiscovery.LoadAgentsFromWorkspace(request.WorkingDirectory, logger);
-        var liveOutput = new CopilotLiveOutputLogger(logger, request.Streaming);
+        var liveOutputLogger = loggerFactory.CreateLogger(WorkflowExecutionStreamingLoggerProvider.CategoryName);
+        var liveOutput = new CopilotLiveOutputLogger(liveOutputLogger, request.Streaming);
 
         var options = new CopilotClientOptions
         {
@@ -117,13 +119,19 @@ public sealed class CopilotClientAdapter(ILogger<CopilotClientAdapter> logger) :
 
     private sealed class CopilotLiveOutputLogger(ILogger logger, bool streamingEnabled)
     {
-        private const int FlushThreshold = 120;
+        private const int FlushThreshold = 320;
 
         private readonly Lock _sync = new();
         private readonly StringBuilder _responseBuffer = new();
         private readonly StringBuilder _thoughtBuffer = new();
+        private bool _bannerWritten;
+        private bool _completed;
         private bool _sawResponseDelta;
         private bool _sawThoughtDelta;
+        private CopilotSection _currentSection;
+        private string? _lastIntent;
+        private string? _lastThoughtBlock;
+        private string? _lastResponseBlock;
 
         public void HandleEvent(SessionEvent sessionEvent)
         {
@@ -132,14 +140,14 @@ public sealed class CopilotClientAdapter(ILogger<CopilotClientAdapter> logger) :
                 switch (sessionEvent)
                 {
                     case AssistantIntentEvent { Data.Intent: { Length: > 0 } intent }:
-                        logger.LogInformation("Copilot intent: {Intent}", intent);
+                        LogIntent(intent);
                         break;
 
                     case AssistantReasoningDeltaEvent { Data.DeltaContent: { Length: > 0 } thoughtDelta }:
                         _sawThoughtDelta = true;
                         if (streamingEnabled)
                         {
-                            AppendChunk(_thoughtBuffer, "Copilot thought", thoughtDelta);
+                            AppendChunk(_thoughtBuffer, CopilotSection.Thought, thoughtDelta);
                         }
                         break;
 
@@ -147,20 +155,20 @@ public sealed class CopilotClientAdapter(ILogger<CopilotClientAdapter> logger) :
                         _sawResponseDelta = true;
                         if (streamingEnabled)
                         {
-                            AppendChunk(_responseBuffer, "Copilot response", responseDelta);
+                            AppendChunk(_responseBuffer, CopilotSection.Response, responseDelta);
                         }
                         break;
 
                     case AssistantReasoningEvent { Data: { Content: { Length: > 0 } } reasoningEventData } when !_sawThoughtDelta:
-                        AppendText("Copilot thought", reasoningEventData.Content);
+                        AppendText(CopilotSection.Thought, reasoningEventData.Content);
                         break;
 
                     case AssistantMessageEvent { Data: { ReasoningText: { Length: > 0 } } messageEventData } when !_sawThoughtDelta:
-                        AppendText("Copilot thought", messageEventData.ReasoningText);
+                        AppendText(CopilotSection.Thought, messageEventData.ReasoningText);
                         break;
 
                     case AssistantMessageEvent { Data: { Content: { Length: > 0 } } messageEventData } when !_sawResponseDelta:
-                        AppendText("Copilot response", messageEventData.Content);
+                        AppendText(CopilotSection.Response, messageEventData.Content);
                         break;
                 }
             }
@@ -172,49 +180,75 @@ public sealed class CopilotClientAdapter(ILogger<CopilotClientAdapter> logger) :
             {
                 if (!_sawThoughtDelta && !string.IsNullOrWhiteSpace(responseData?.ReasoningText))
                 {
-                    AppendText("Copilot thought", responseData.ReasoningText);
+                    AppendText(CopilotSection.Thought, responseData.ReasoningText);
                 }
 
                 if (!_sawResponseDelta && !string.IsNullOrWhiteSpace(responseData?.Content))
                 {
-                    AppendText("Copilot response", responseData.Content);
+                    AppendText(CopilotSection.Response, responseData.Content);
                 }
 
-                FlushBuffer(_thoughtBuffer, "Copilot thought");
-                FlushBuffer(_responseBuffer, "Copilot response");
-            }
-        }
+                FlushBuffer(_thoughtBuffer, CopilotSection.Thought);
+                FlushBuffer(_responseBuffer, CopilotSection.Response);
 
-        private void AppendText(string label, string content)
-        {
-            foreach (var line in NormalizeLines(content))
-            {
-                if (!string.IsNullOrWhiteSpace(line))
+                if (_bannerWritten && !_completed)
                 {
-                    logger.LogInformation("{Label}: {Content}", label, line);
+                    logger.LogInformation("╰─ Turn complete");
+                    _completed = true;
                 }
             }
         }
 
-        private void AppendChunk(StringBuilder buffer, string label, string chunk)
+        private void LogIntent(string intent)
+        {
+            var normalized = NormalizeContent(intent);
+            if (string.IsNullOrWhiteSpace(normalized) || string.Equals(_lastIntent, normalized, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            EnsureBanner();
+            _currentSection = CopilotSection.None;
+            _lastIntent = normalized;
+            logger.LogInformation("├─ Intent: {Intent}", normalized);
+        }
+
+        private void AppendText(CopilotSection section, string content)
+        {
+            var normalized = NormalizeContent(content);
+            if (string.IsNullOrWhiteSpace(normalized) || IsDuplicate(section, normalized))
+            {
+                return;
+            }
+
+            BeginSection(section);
+            WriteBlock(normalized);
+        }
+
+        private void AppendChunk(StringBuilder buffer, CopilotSection section, string chunk)
         {
             foreach (var character in NormalizeNewlines(chunk))
             {
                 if (character == '\n')
                 {
-                    FlushBuffer(buffer, label);
+                    FlushBuffer(buffer, section);
                     continue;
                 }
 
                 buffer.Append(character);
                 if (buffer.Length >= FlushThreshold)
                 {
-                    FlushBuffer(buffer, label);
+                    FlushBuffer(buffer, section);
                 }
+            }
+
+            if (buffer.Length > 0 && ShouldFlushOnChunkBoundary(chunk, buffer.Length, section))
+            {
+                FlushBuffer(buffer, section);
             }
         }
 
-        private void FlushBuffer(StringBuilder buffer, string label)
+        private void FlushBuffer(StringBuilder buffer, CopilotSection section)
         {
             if (buffer.Length == 0)
             {
@@ -223,11 +257,90 @@ public sealed class CopilotClientAdapter(ILogger<CopilotClientAdapter> logger) :
 
             var content = buffer.ToString();
             buffer.Clear();
-            if (!string.IsNullOrWhiteSpace(content))
+            AppendText(section, content);
+        }
+
+        private void BeginSection(CopilotSection section)
+        {
+            EnsureBanner();
+            if (_currentSection == section)
             {
-                logger.LogInformation("{Label}: {Content}", label, content);
+                return;
+            }
+
+            _currentSection = section;
+            logger.LogInformation(section switch
+            {
+                CopilotSection.Thought => "├─ Thought",
+                CopilotSection.Response => "├─ Response",
+                _ => "├─ Copilot"
+            });
+        }
+
+        private void WriteBlock(string content)
+        {
+            foreach (var line in NormalizeLines(content))
+            {
+                if (line.Length == 0)
+                {
+                    logger.LogInformation("│");
+                    continue;
+                }
+
+                logger.LogInformation("│  {Line}", line);
             }
         }
+
+        private void EnsureBanner()
+        {
+            if (_bannerWritten)
+            {
+                return;
+            }
+
+            logger.LogInformation("╭─ GitHub Copilot");
+            _bannerWritten = true;
+        }
+
+        private bool IsDuplicate(CopilotSection section, string content)
+        {
+            ref var lastBlock = ref section == CopilotSection.Thought
+                ? ref _lastThoughtBlock
+                : ref _lastResponseBlock;
+
+            if (string.Equals(lastBlock, content, StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            lastBlock = content;
+            return false;
+        }
+
+        private static bool ShouldFlushOnChunkBoundary(string chunk, int bufferLength, CopilotSection section)
+        {
+            var normalizedChunk = chunk.Replace("\r\n", "\n", StringComparison.Ordinal)
+                .Replace('\r', '\n');
+            if (normalizedChunk.Length == 0 || normalizedChunk[^1] == '\n')
+            {
+                return false;
+            }
+
+            var preferredLength = section == CopilotSection.Thought ? 24 : 48;
+            var forcedLength = section == CopilotSection.Thought ? 64 : 120;
+            if (bufferLength >= forcedLength)
+            {
+                return true;
+            }
+
+            var trailingCharacter = normalizedChunk[^1];
+            return bufferLength >= preferredLength
+                && (char.IsWhiteSpace(trailingCharacter)
+                    || trailingCharacter is '.' or ',' or ':' or ';' or '!' or '?' or ')' or ']' or '}');
+        }
+
+        private static string NormalizeContent(string content)
+            => string.Join('\n', NormalizeLines(content)).Trim();
 
         private static IEnumerable<char> NormalizeNewlines(string content)
         {
@@ -240,10 +353,17 @@ public sealed class CopilotClientAdapter(ILogger<CopilotClientAdapter> logger) :
             }
         }
 
-        private static IEnumerable<string> NormalizeLines(string content)
+        private static string[] NormalizeLines(string content)
             => content.Replace("\r\n", "\n", StringComparison.Ordinal)
                 .Replace('\r', '\n')
                 .Split('\n');
+
+        private enum CopilotSection
+        {
+            None,
+            Thought,
+            Response,
+        }
     }
 
     private static void EnsureExtractedCopilotCliIsExecutable()

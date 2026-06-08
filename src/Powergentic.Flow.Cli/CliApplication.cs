@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Console;
 using Powergentic.Flow.Actions.GitHubCopilot;
 using Powergentic.Flow.Actions.Script;
 using Powergentic.Flow.Core;
@@ -391,7 +392,9 @@ public static class CliApplication
                 options.SingleLine = true;
                 options.TimestampFormat = "HH:mm:ss ";
             });
+            builder.AddFilter<ConsoleLoggerProvider>(WorkflowExecutionStreamingLoggerProvider.CategoryName, LogLevel.None);
             builder.AddProvider(new WorkflowExecutionTranscriptLoggerProvider(resolvedExecutionConsole));
+            builder.AddProvider(new WorkflowExecutionStreamingLoggerProvider(resolvedExecutionConsole));
             builder.SetMinimumLevel(minimumLevel);
         });
         services.AddScriptAction();

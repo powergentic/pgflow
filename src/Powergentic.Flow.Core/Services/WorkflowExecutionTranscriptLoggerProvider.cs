@@ -14,7 +14,9 @@ public sealed class WorkflowExecutionTranscriptLoggerProvider(WorkflowExecutionC
     {
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
 
-        public bool IsEnabled(LogLevel logLevel) => logLevel != LogLevel.None;
+        public bool IsEnabled(LogLevel logLevel)
+            => logLevel != LogLevel.None
+                && !string.Equals(categoryName, WorkflowExecutionStreamingLoggerProvider.CategoryName, StringComparison.Ordinal);
 
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
         {
